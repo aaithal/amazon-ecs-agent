@@ -1,6 +1,6 @@
 {
-	"ImportPath": "github.com/aws/ecs-container-agent",
-	"GoVersion": "go1.3.1",
+	"ImportPath": "github.com/aws/amazon-ecs-agent/agent",
+	"GoVersion": "go1.4",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -38,6 +38,11 @@
 			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
 		},
 		{
+			"ImportPath": "github.com/docker/docker/pkg/mount",
+			"Comment": "v1.3.0-846-gbfde3f2",
+			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
+		},
+		{
 			"ImportPath": "github.com/docker/docker/pkg/parsers",
 			"Comment": "v1.3.0-846-gbfde3f2",
 			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
@@ -49,6 +54,11 @@
 		},
 		{
 			"ImportPath": "github.com/docker/docker/pkg/promise",
+			"Comment": "v1.3.0-846-gbfde3f2",
+			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/symlink",
 			"Comment": "v1.3.0-846-gbfde3f2",
 			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
 		},
@@ -93,6 +103,11 @@
 			"Rev": "bfde3f2cd1807cf4472462819645851c58b22e72"
 		},
 		{
+			"ImportPath": "github.com/docker/libcontainer",
+			"Comment": "v1.4.0-121-g21ed476",
+			"Rev": "21ed4766b1523373b0463af497ef1c6b3b98c2ca"
+		},
+		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
 			"Comment": "0.2.1-324-g11620a6",
 			"Rev": "11620a68c22a84657503068ffc14f2bc292d9aa6"
@@ -108,6 +123,10 @@
 		{
 			"ImportPath": "github.com/gorilla/websocket",
 			"Rev": "87f6f6a22ebfbc3f89b9ccdc7fddd1b914c095f9"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "7dbad50ab5b31073856416cdcfeb2796d682f844"
 		},
 		{
 			"ImportPath": "gopkg.in/inconshreveable/log15.v2",

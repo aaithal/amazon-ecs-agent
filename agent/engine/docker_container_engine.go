@@ -35,7 +35,8 @@ import (
 
 // Interface to make testing it easier
 type DockerClient interface {
-	ContainerEvents() (<-chan DockerContainerChangeEvent, error)
+	ContainerEvents() (<-chan DockerContainerChangeEvent, chan *docker.APIEvents, error)
+	UnsubscribeContainerEvents(chan *docker.APIEvents) error
 
 	PullImage(image string) error
 	CreateContainer(*docker.Config, string) (string, error)
@@ -46,6 +47,7 @@ type DockerClient interface {
 
 	InspectContainer(string) (*docker.Container, error)
 	DescribeContainer(string) (api.ContainerStatus, error)
+	ListContainers(bool) ([]string, error)
 
 	Version() (string, error)
 }
@@ -192,7 +194,6 @@ func (dg *DockerGoClient) CreateContainer(config *docker.Config, name string) (s
 
 	containerOptions := docker.CreateContainerOptions{Config: config, Name: name}
 	dockerContainer, err := client.CreateContainer(containerOptions)
-
 	if err != nil {
 		return "", err
 	}
@@ -322,11 +323,11 @@ func (dg *DockerGoClient) client() (*docker.Client, error) {
 }
 
 // Listen to the docker event stream for container changes and pass them up
-func (dg *DockerGoClient) ContainerEvents() (<-chan DockerContainerChangeEvent, error) {
+func (dg *DockerGoClient) ContainerEvents() (<-chan DockerContainerChangeEvent, chan *docker.APIEvents, error) {
 	client, err := dg.client()
 	if err != nil {
 		log.Error("Unable to communicate with docker daemon", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	events := make(chan *docker.APIEvents)
@@ -334,7 +335,7 @@ func (dg *DockerGoClient) ContainerEvents() (<-chan DockerContainerChangeEvent, 
 	err = client.AddEventListener(events)
 	if err != nil {
 		log.Error("Unable to add a docker event listener", "err", err)
-		return nil, err
+		return nil, nil, err
 	}
 
 	changedContainers := make(chan DockerContainerChangeEvent)
@@ -372,7 +373,40 @@ func (dg *DockerGoClient) ContainerEvents() (<-chan DockerContainerChangeEvent, 
 		}
 	}()
 
-	return changedContainers, nil
+	return changedContainers, events, nil
+}
+
+// UnsubscribeContainerEvents removes a docker event listener.
+func (dg *DockerGoClient) UnsubscribeContainerEvents(eventListener chan *docker.APIEvents) error {
+	client, err := dg.client()
+	if err != nil {
+		return err
+	}
+
+	return client.RemoveEventListener(eventListener)
+}
+
+// ListContainers lists returns a slice of container IDs.
+func (dg *DockerGoClient) ListContainers(all bool) ([]string, error) {
+	client, err := dg.client()
+	if err != nil {
+		return nil, err
+	}
+
+	// Empty options object will get us only running containers.
+	containers, err := client.ListContainers(docker.ListContainersOptions{All: all})
+	if err != nil {
+		return nil, err
+	}
+
+	// We get an empty slice if there are no containers to be listed.
+	// Extract container IDs from this list.
+	containerIDs := make([]string, len(containers))
+	for i, container := range containers {
+		containerIDs[i] = container.ID
+	}
+
+	return containerIDs, nil
 }
 
 func (dg *DockerGoClient) Version() (string, error) {
