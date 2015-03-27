@@ -155,7 +155,7 @@ func main() {
 
 	if !stats.IsMetricCollectionDisabled() {
 		statsEngine := stats.NewDockerStatsEngine()
-		err = statsEngine.MustInit(taskEngine, containerInstanceArn, cfg.Cluster)
+		err = statsEngine.MustInit(taskEngine, cfg.Cluster, containerInstanceArn)
 		if err != nil {
 			log.Error("Error initializing stats engine", "err", err)
 		}

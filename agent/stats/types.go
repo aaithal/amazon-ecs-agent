@@ -40,6 +40,7 @@ type CPUStatsSet struct {
 	Max         float32   `json:"max"`
 	SampleCount int       `json:"sampleCount"`
 	Sum         float32   `json:"sum"`
+	Unit        string    `json:"unit"`
 	Timestamp   time.Time `json:"timeStamp"`
 }
 
@@ -49,12 +50,19 @@ type MemoryStatsSet struct {
 	Max         uint32    `json:"max"`
 	SampleCount int       `json:"sampleCount"`
 	Sum         uint32    `json:"sum"`
+	Unit        string    `json:"unit"`
 	Timestamp   time.Time `json:"timeStamp"`
+}
+
+// ContainerMetadata contains meta-data information for a container.
+type ContainerMetadata struct {
+	DockerID string `json:"-"`
+	Name     string `json:"containerName"`
 }
 
 // CronContainer abstracts methods to gather and aggregate utilization data for a container.
 type CronContainer struct {
-	containerMetadata ContainerMetadata
+	containerMetadata *ContainerMetadata
 	ctx               context.Context
 	cancel            context.CancelFunc
 	statePath         string
@@ -62,30 +70,28 @@ type CronContainer struct {
 	statsCollector    ContainerStatsCollector
 }
 
-// ContainerStatsSet groups container meta-data and CPU and memory stats sets.
-type ContainerStatsSet struct {
-	InstanceMetadata  *InstanceMetadata `json:"instanceMetadata"`
-	ContainerMetadata ContainerMetadata `json:"containerMetaData"`
-	CPUStatsSet       *CPUStatsSet      `json:"cpuStatsSet"`
-	MemoryStatsSet    *MemoryStatsSet   `json:"memoryStatsSet"`
-}
-
-// ContainerRawUsageStats groups container meta-data and raw CPU and memory usage stats.
-type ContainerRawUsageStats struct {
-	InstanceMetadata  *InstanceMetadata `json:"instanceMetadata"`
-	ContainerMetadata ContainerMetadata `json:"containerMetaData"`
-	UsageStats        []UsageStats      `json:"usageStats"`
-}
-
-// ContainerMetadata contains meta-data information for a container.
-type ContainerMetadata struct {
-	DockerID string
-	TaskArn  string
-}
-
 // InstanceMetadata contains meta-data information for the container instance.
 // ecs container agent.
 type InstanceMetadata struct {
-	ClusterArn           string
-	ContainerInstanceArn string
+	ClusterArn           string `json:"cluster"`
+	ContainerInstanceArn string `json:"containerInstance"`
+}
+
+// ContainerMetric groups CPU and Memory usage metrics for a container.
+type ContainerMetric struct {
+	ContainerMetadata *ContainerMetadata `json:"containerMetadata"`
+	CPUStatsSet       *CPUStatsSet       `json:"cpuStatsSet"`
+	MemoryStatsSet    *MemoryStatsSet    `json:"memoryStatsSet"`
+}
+
+// TaskMetric groups all containers belonging to a task and their CPU and Memory usage stats.
+type TaskMetric struct {
+	TaskArn          string            `json:"taskArn"`
+	ContainerMetrics []ContainerMetric `json:"containerMetrics"`
+}
+
+// InstanceMetrics aggregates all task metrics to publish to backend.
+type InstanceMetrics struct {
+	Metadata    *InstanceMetadata `json:"metadata"`
+	TaskMetrics []TaskMetric      `json:"taskMetrics"`
 }

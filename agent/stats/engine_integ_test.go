@@ -53,11 +53,13 @@ func createGremlin(client *docker.Client) (*docker.Container, error) {
 
 type IntegContainerMetadataResolver struct {
 	containerIDToTask map[string]*api.Task
+	containerIDToName map[string]string
 }
 
 func newIntegContainerMetadataResolver() *IntegContainerMetadataResolver {
 	resolver := IntegContainerMetadataResolver{
 		containerIDToTask: make(map[string]*api.Task),
+		containerIDToName: make(map[string]string),
 	}
 
 	return &resolver
@@ -72,8 +74,17 @@ func (resolver *IntegContainerMetadataResolver) ResolveTask(containerID string) 
 	return task, nil
 }
 
-func (resolver *IntegContainerMetadataResolver) addToMap(containerID string, taskArn string) {
+func (resolver *IntegContainerMetadataResolver) ResolveName(dockerID string) (string, error) {
+	name, exists := resolver.containerIDToName[dockerID]
+	if !exists {
+		return "", errors.New("unmapped container")
+	}
+
+	return name, nil
+}
+func (resolver *IntegContainerMetadataResolver) addToMap(containerID string, taskArn string, name string) {
 	resolver.containerIDToTask[containerID] = &api.Task{Arn: taskArn}
+	resolver.containerIDToName[containerID] = name
 }
 
 func TestStatsEngineWithExistingContainers(t *testing.T) {
@@ -98,7 +109,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin")
+	resolver.addToMap(container.ID, "gremlin", "docker-gremlin")
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)
@@ -121,41 +132,31 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	statsSets := engine.GetContainersStatsSet()
-	if len(statsSets) != 1 {
-		t.Error("Incorrect number of stats sets. Expected 1, got: ", len(statsSets))
+	instanceMetrics, err := engine.GetInstanceMetrics()
+	if err != nil {
+		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	for _, statsSet := range statsSets {
-		if statsSet.CPUStatsSet == nil {
-			t.Error("CPUStatsSet is nil")
-		}
-		if statsSet.MemoryStatsSet == nil {
-			t.Error("MemoryStatsSet is nil")
-		}
+	taskMetrics := instanceMetrics.TaskMetrics
+	if len(taskMetrics) != 1 {
+		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
+	}
+	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
+	if err != nil {
+		t.Error("Error validating container metrics: ", err)
 	}
 
-	rawStatsSets := engine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 1 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
-	}
-
-	if len(rawStatsSets[0].UsageStats) != 2 {
-		t.Error("Incorrect number of raw usage stats sets. Expected 2, got: ", len(rawStatsSets[0].UsageStats))
-	}
 	err = client.StopContainer(container.ID, defaultDockerTimeoutSeconds)
 	if err != nil {
 		t.Error("Error stopping container: ", container.ID, " error: ", err)
 	}
 
 	time.Sleep(waitForCleanupSleep)
-	statsSets = engine.GetContainersStatsSet()
-	if len(statsSets) != 0 {
-		t.Error("Incorrect number of stats sets. Expected 0, got: ", len(statsSets))
-	}
-	rawStatsSets = engine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 0 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
+
+	// Should not contain any metrics after cleanup.
+	_, err = engine.GetInstanceMetrics()
+	if err == nil {
+		t.Error("Expected non-empty error for empty stats.")
 	}
 }
 
@@ -180,7 +181,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin")
+	resolver.addToMap(container.ID, "gremlin", "docker-gremlin")
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)
@@ -196,29 +197,22 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	if err != nil {
 		t.Error("Error starting container: ", container.ID, " error: ", err)
 	}
+
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	statsSets := engine.GetContainersStatsSet()
-	if len(statsSets) != 1 {
-		t.Error("Incorrect number of stats sets. Expected 1, got: ", len(statsSets))
-	}
-	for _, statsSet := range statsSets {
-		if statsSet.CPUStatsSet == nil {
-			t.Error("CPUStatsSet is nil")
-		}
-		if statsSet.MemoryStatsSet == nil {
-			t.Error("MemoryStatsSet is nil")
-		}
+	instanceMetrics, err := engine.GetInstanceMetrics()
+	if err != nil {
+		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	rawStatsSets := engine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 1 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
+	taskMetrics := instanceMetrics.TaskMetrics
+	if len(taskMetrics) != 1 {
+		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
-
-	if len(rawStatsSets[0].UsageStats) != 2 {
-		t.Error("Incorrect number of raw usage stats sets. Expected 2, got: ", len(rawStatsSets[0].UsageStats))
+	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
+	if err != nil {
+		t.Error("Error validating container metrics: ", err)
 	}
 
 	err = client.StopContainer(container.ID, defaultDockerTimeoutSeconds)
@@ -227,13 +221,11 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	}
 
 	time.Sleep(waitForCleanupSleep)
-	statsSets = engine.GetContainersStatsSet()
-	if len(statsSets) != 0 {
-		t.Error("Incorrect number of stats sets. Expected 0, got: ", len(statsSets))
-	}
-	rawStatsSets = engine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 0 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
+
+	// Should not contain any metrics after cleanup.
+	_, err = engine.GetInstanceMetrics()
+	if err == nil {
+		t.Error("Expected non-empty error for empty stats.")
 	}
 }
 
@@ -302,29 +294,18 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	statsSets := statsEngine.GetContainersStatsSet()
-
-	// We should get stats only for 'container' and not for 'unmappedContainer'.
-	if len(statsSets) != 1 {
-		t.Error("Incorrect number of stats sets. Expected 1, got: ", len(statsSets))
+	instanceMetrics, err := statsEngine.GetInstanceMetrics()
+	if err != nil {
+		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	for _, statsSet := range statsSets {
-		if statsSet.CPUStatsSet == nil {
-			t.Error("CPUStatsSet is nil")
-		}
-		if statsSet.MemoryStatsSet == nil {
-			t.Error("MemoryStatsSet is nil")
-		}
+	taskMetrics := instanceMetrics.TaskMetrics
+	if len(taskMetrics) != 1 {
+		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
-
-	rawStatsSets := statsEngine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 1 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
-	}
-
-	if len(rawStatsSets[0].UsageStats) != 2 {
-		t.Error("Incorrect number of raw usage stats sets. Expected 2, got: ", len(rawStatsSets[0].UsageStats))
+	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
+	if err != nil {
+		t.Error("Error validating container metrics: ", err)
 	}
 
 	err = client.StopContainer(container.ID, defaultDockerTimeoutSeconds)
@@ -333,12 +314,10 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	}
 
 	time.Sleep(waitForCleanupSleep)
-	statsSets = statsEngine.GetContainersStatsSet()
-	if len(statsSets) != 0 {
-		t.Error("Incorrect number of stats sets. Expected 0, got: ", len(statsSets))
-	}
-	rawStatsSets = statsEngine.GetContainersRawUsageStats(2)
-	if len(rawStatsSets) != 0 {
-		t.Error("Incorrect number of raw stats sets. Expected 1, got: ", len(rawStatsSets))
+
+	// Should not contain any metrics after cleanup.
+	_, err = statsEngine.GetInstanceMetrics()
+	if err == nil {
+		t.Error("Expected non-empty error for empty stats.")
 	}
 }

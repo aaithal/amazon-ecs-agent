@@ -27,8 +27,10 @@ const (
 	// MemoryUsageUnit is the unit of memory usage being reported for a container.
 	MemoryUsageUnit = "Megabytes"
 
-	// BytesInMB is the number of bytes in a MegaByte
-	BytesInMB = 1048576
+	// BytesInMB is the number of bytes in a MegaByte. Using MB as it is one of the
+	// units supported by Cloudwatch.
+	// refer http://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_MetricDatum.html
+	BytesInMB = 1000 * 1000
 )
 
 // Queue abstracts a queue using UsageStats slice.
