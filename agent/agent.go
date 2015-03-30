@@ -30,6 +30,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
+	"github.com/aws/amazon-ecs-agent/agent/stats"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/version"
 )
@@ -151,6 +152,14 @@ func main() {
 
 	// Start sending events to the backend
 	go eventhandler.HandleEngineEvents(taskEngine, client, stateManager)
+
+	if !stats.IsMetricCollectionDisabled() {
+		statsEngine := stats.NewDockerStatsEngine()
+		err = statsEngine.MustInit(taskEngine, cfg.Cluster, containerInstanceArn)
+		if err != nil {
+			log.Error("Error initializing stats engine", "err", err)
+		}
+	}
 
 	log.Info("Beginning Polling for updates")
 	// Todo, split into separate package

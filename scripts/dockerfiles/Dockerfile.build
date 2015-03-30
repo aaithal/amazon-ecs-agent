@@ -20,8 +20,14 @@ VOLUME ['/out']
 RUN mkdir -p /go/src/github.com/aws/
 RUN go get github.com/tools/godep
 
+# For gomock
+RUN go get code.google.com/p/gomock/gomock
+RUN go get code.google.com/p/gomock/mockgen
+RUN go get golang.org/x/tools/cmd/goimports
 
-COPY /scripts/build /scripts/build
+COPY scripts/build /scripts/build
+# For gomock
+COPY /scripts/mockgen.sh /scripts/mockgen.sh
 WORKDIR /go/src/github.com/aws/amazon-ecs-agent
 
 ENTRYPOINT /scripts/build

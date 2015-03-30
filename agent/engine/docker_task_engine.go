@@ -251,7 +251,7 @@ func (engine *DockerTaskEngine) emitEvent(task *api.Task, container *api.DockerC
 
 // openEventstream opens, but does not consume, the docker event stream
 func (engine *DockerTaskEngine) openEventstream() error {
-	events, err := engine.client.ContainerEvents()
+	events, _, err := engine.client.ContainerEvents()
 	if err != nil {
 		return err
 	}
