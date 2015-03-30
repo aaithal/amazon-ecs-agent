@@ -154,11 +154,7 @@ func main() {
 	go eventhandler.HandleEngineEvents(taskEngine, client, stateManager)
 
 	if !stats.IsMetricCollectionDisabled() {
-		statsEngine := stats.NewDockerStatsEngine()
-		err = statsEngine.MustInit(taskEngine, cfg.Cluster, containerInstanceArn)
-		if err != nil {
-			log.Error("Error initializing stats engine", "err", err)
-		}
+		// TODO: Initialize stats engine.
 	}
 
 	log.Info("Beginning Polling for updates")

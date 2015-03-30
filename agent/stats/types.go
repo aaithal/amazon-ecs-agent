@@ -36,28 +36,28 @@ type UsageStats struct {
 
 // CPUStatsSet is the format in which CPU usage data is exported to the server.
 type CPUStatsSet struct {
-	Min         float32   `json:"min"`
-	Max         float32   `json:"max"`
-	SampleCount int       `json:"sampleCount"`
-	Sum         float32   `json:"sum"`
-	Unit        string    `json:"unit"`
-	Timestamp   time.Time `json:"timeStamp"`
+	Min         float32 `json:"min"`
+	Max         float32 `json:"max"`
+	SampleCount int     `json:"sampleCount"`
+	Sum         float32 `json:"sum"`
+	Unit        string  `json:"unit"`
+	Timestamp   int64   `json:"timestamp"`
 }
 
 // MemoryStatsSet is the format in which memory usage data is exported to the server.
 type MemoryStatsSet struct {
-	Min         uint32    `json:"min"`
-	Max         uint32    `json:"max"`
-	SampleCount int       `json:"sampleCount"`
-	Sum         uint32    `json:"sum"`
-	Unit        string    `json:"unit"`
-	Timestamp   time.Time `json:"timeStamp"`
+	Min         uint32 `json:"min"`
+	Max         uint32 `json:"max"`
+	SampleCount int    `json:"sampleCount"`
+	Sum         uint32 `json:"sum"`
+	Unit        string `json:"unit"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 // ContainerMetadata contains meta-data information for a container.
 type ContainerMetadata struct {
 	DockerID string `json:"-"`
-	Name     string `json:"containerName"`
+	Name     string `json:"name"`
 }
 
 // CronContainer abstracts methods to gather and aggregate utilization data for a container.
@@ -79,7 +79,7 @@ type InstanceMetadata struct {
 
 // ContainerMetric groups CPU and Memory usage metrics for a container.
 type ContainerMetric struct {
-	ContainerMetadata *ContainerMetadata `json:"containerMetadata"`
+	ContainerMetadata *ContainerMetadata `json:"metadata"`
 	CPUStatsSet       *CPUStatsSet       `json:"cpuStatsSet"`
 	MemoryStatsSet    *MemoryStatsSet    `json:"memoryStatsSet"`
 }

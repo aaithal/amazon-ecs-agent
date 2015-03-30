@@ -63,3 +63,35 @@ func (_m *MockContainerMetadataResolver) ResolveName(_param0 string) (string, er
 func (_mr *_MockContainerMetadataResolverRecorder) ResolveName(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "ResolveName", arg0)
 }
+
+// Mock of Engine interface
+type MockEngine struct {
+	ctrl     *gomock.Controller
+	recorder *_MockEngineRecorder
+}
+
+// Recorder for MockEngine (not exported)
+type _MockEngineRecorder struct {
+	mock *MockEngine
+}
+
+func NewMockEngine(ctrl *gomock.Controller) *MockEngine {
+	mock := &MockEngine{ctrl: ctrl}
+	mock.recorder = &_MockEngineRecorder{mock}
+	return mock
+}
+
+func (_m *MockEngine) EXPECT() *_MockEngineRecorder {
+	return _m.recorder
+}
+
+func (_m *MockEngine) GetInstanceMetrics() (*InstanceMetrics, error) {
+	ret := _m.ctrl.Call(_m, "GetInstanceMetrics")
+	ret0, _ := ret[0].(*InstanceMetrics)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockEngineRecorder) GetInstanceMetrics() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetInstanceMetrics")
+}

@@ -259,7 +259,7 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 func TestStatsEngineInvalidTaskEngine(t *testing.T) {
 	statsEngine := NewDockerStatsEngine()
 	taskEngine := &MockTaskEngine{}
-	err := statsEngine.MustInit(taskEngine, "", "")
+	err := statsEngine.MustInit(taskEngine, nil)
 	if err == nil {
 		t.Error("Expected error in engine initialization, got nil")
 	}
