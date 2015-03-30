@@ -274,7 +274,7 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 		},
 		&testTask)
 	statsEngine := NewDockerStatsEngine()
-	err = statsEngine.MustInit(taskEngine, defaultClusterArn, defaultContainerInstanceArn)
+	err = statsEngine.MustInit(taskEngine, newInstanceMetadata(defaultClusterArn, defaultContainerInstanceArn))
 	if err != nil {
 		t.Error("Error initializing stats engine: ", err)
 	}

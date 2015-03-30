@@ -102,7 +102,7 @@ func (queue *Queue) GetCPUStatsSet() (*CPUStatsSet, error) {
 		cpuSet.SampleCount++
 		cpuSet.Sum += perc
 	}
-	cpuSet.Timestamp = time.Now()
+	cpuSet.Timestamp = time.Now().UnixNano() / int64(time.Millisecond)
 
 	return cpuSet, nil
 }
@@ -136,7 +136,7 @@ func (queue *Queue) GetMemoryStatsSet() (*MemoryStatsSet, error) {
 		memSet.Sum += mem
 	}
 
-	memSet.Timestamp = time.Now()
+	memSet.Timestamp = time.Now().UnixNano() / int64(time.Millisecond)
 
 	return memSet, nil
 }

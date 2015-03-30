@@ -52,6 +52,12 @@ type DockerContainerMetadataResolver struct {
 	dockerTaskEngine *ecsengine.DockerTaskEngine
 }
 
+// Engine defines methods to be implemented by the engine struct. It is
+// defined to make testing easier.
+type Engine interface {
+	GetInstanceMetrics() (*InstanceMetrics, error)
+}
+
 // DockerStatsEngine is used to monitor docker container events and to report
 // utlization metrics of the same.
 type DockerStatsEngine struct {
@@ -122,14 +128,14 @@ func NewDockerStatsEngine() *DockerStatsEngine {
 }
 
 // MustInit initializes fields of the DockerStatsEngine object.
-func (engine *DockerStatsEngine) MustInit(taskEngine ecsengine.TaskEngine, clusterArn string, containerInstanceArn string) error {
+func (engine *DockerStatsEngine) MustInit(taskEngine ecsengine.TaskEngine, imd *InstanceMetadata) error {
 	log.Info("Initializing stats engine")
 	err := engine.initDockerClient()
 	if err != nil {
 		return err
 	}
 
-	engine.instanceMetadata = newInstanceMetadata(clusterArn, containerInstanceArn)
+	engine.instanceMetadata = imd
 
 	engine.resolver, err = newDockerContainerMetadataResolver(taskEngine)
 	if err != nil {
@@ -359,14 +365,6 @@ func newDockerContainerMetadataResolver(taskEngine ecsengine.TaskEngine) (*Docke
 	return resolver, nil
 }
 
-// newInstanceMetadata creates the singleton metadata object.
-func newInstanceMetadata(clusterArn string, containerInstanceArn string) *InstanceMetadata {
-	return &InstanceMetadata{
-		ClusterArn:           clusterArn,
-		ContainerInstanceArn: containerInstanceArn,
-	}
-}
-
 // setMetricCollectionFlag reads the ECS_DISABLE_METRICS env variable and
 // sets the isMetricCollectionDisabled flag appropriately.
 func setMetricCollectionFlag() {
@@ -412,4 +410,12 @@ func (engine *DockerStatsEngine) getContainerMetricsForTask(taskArn string) ([]C
 	}
 
 	return containerMetrics, nil
+}
+
+// newInstanceMetadata creates the singleton metadata object.
+func newInstanceMetadata(clusterArn string, containerInstanceArn string) *InstanceMetadata {
+	return &InstanceMetadata{
+		ClusterArn:           clusterArn,
+		ContainerInstanceArn: containerInstanceArn,
+	}
 }
