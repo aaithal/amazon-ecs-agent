@@ -1,3 +1,5 @@
 misc/certs/ca-certificates.crt
+misc/netkitten/netkitten
 out/
 coverage/
+*.swp

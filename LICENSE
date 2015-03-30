@@ -1,4 +1,4 @@
-Copyright 2014 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2014-2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"). You
 may not use this file except in compliance with the License. A copy of
@@ -16,6 +16,8 @@ Includes the following packages:
 ***
 Docker, Copyright 2014 Docker, Inc.
 log15, Copyright 2014 Alan Shreve
+gomock, Copyright 2010-2014 Google Inc.
+libcontainer, Copyright 2014 Docker, Inc.
 
 each of which are licensed under the Apache License, Version 2.0 (the
 "License"); you may not use this file except in compliance with the
