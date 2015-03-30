@@ -53,6 +53,7 @@ release: certs docker-release
 
 gogenerate:
 	@cd agent && PATH=$(PATH):$(shell pwd)/scripts go generate ./...
+#	@cd agent && GOOS=generate godep go generate ./...
 
 # We need to bundle certificates with our scratch-based container
 certs: misc/certs/ca-certificates.crt
