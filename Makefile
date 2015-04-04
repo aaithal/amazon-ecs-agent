@@ -52,8 +52,7 @@ release: certs docker-release
 	@echo "Built Docker image \"amazon/amazon-ecs-agent:latest\""
 
 gogenerate:
-	@cd agent && PATH=$(PATH):$(shell pwd)/scripts go generate ./...
-#	@cd agent && GOOS=generate godep go generate ./...
+	@cd agent && PATH=$(shell pwd)/scripts/generate:$(PATH) GOOS=generate godep go generate ./...
 
 # We need to bundle certificates with our scratch-based container
 certs: misc/certs/ca-certificates.crt
@@ -89,10 +88,7 @@ gremlin:
 get-deps:
 	go get github.com/tools/godep
 	go get golang.org/x/tools/cover
-	go get golang.org/x/tools/cmd/goimports
-	go get code.google.com/p/gomock/gomock
 	go get code.google.com/p/gomock/mockgen
-	go get golang.org/x/tools/cmd/goimports
 
 clean:
 	rm -f misc/certs/ca-certificates.crt &> /dev/null

@@ -1,5 +1,7 @@
 # Amazon ECS Container Agent
 
+[![Build Status](https://travis-ci.org/aws/amazon-ecs-agent.svg?branch=master)](https://travis-ci.org/aws/amazon-ecs-agent)
+
 The Amazon ECS Container Agent is software developed for the [Amazon EC2 Container Service](http://aws.amazon.com/ecs/).
 
 It runs on Container Instances and starts containers on behalf of Amazon ECS.
@@ -31,7 +33,7 @@ See also the Advanced Usage section below.
 The Amazon ECS Container Agent may be built by simply typing `make` with the [Docker
 daemon](https://docs.docker.com/installation/) (v1.5.0) running.
 
-This will produce an image tagged `amazon/ecs-container-agent:development` which
+This will produce an image tagged `amazon/ecs-container-agent:make` which
 you may run as described above.
 
 ### Standalone
@@ -87,8 +89,8 @@ configure them as something other than the defaults.
 | `ECS_LOGFILE`   | /ecs-agent.log              | The path to output full debugging info to. If blank, no logs will be written to file. If set, logs at debug level (regardless of ECS\_LOGLEVEL) will be written to that file. | blank |
 | `ECS_CHECKPOINT`   | &lt;true &#124; false&gt; | Whether to checkpoint state to the DATADIR specified below | true if `ECS_DATADIR` is non-empty; false otherwise |
 | `ECS_DATADIR`      |   /data/                  | The container path where state is checkpointed for use across agent restarts. | /data/ |
-| `ECS_BACKEND_HOST` | ecs.us-east-1.amazonaws.com | The host to make backend api calls against. | ecs.REGION.amazonaws.com |
-| `ECS_BACKEND_PORT` | 443                         | The associated port to make backend api calls with. | 443 |
+| `ECS_UPDATES_ENABLED` | &lt;true &#124; false&gt; | Whether to exit for an updater to apply updates when requested | false |
+| `ECS_UPDATE_DOWNLOAD_DIR` | /cache               | Where to place update tarballs within the container |  |
 | `AWS_SESSION_TOKEN` |                         | The [Session Token](http://docs.aws.amazon.com/STS/latest/UsingSTS/Welcome.html) used for temporary credentials. | Taken from EC2 Instance Metadata |
 
 ### Flags
@@ -104,7 +106,12 @@ agent will output on stdout at the given level. This is overridden by the
 ## Contributing
 
 Contributions and feedback are welcome! Proposals and Pull Requests will be
-considered and responded to.
+considered and responded to. Please see the
+[CONTRIBUTING.md](https://github.com/aws/amazon-ecs-agent/blob/master/CONTRIBUTING.md)
+file for more information.
+
+Amazon Web Services does not currently provide support for modified copies of
+this software.
 
 
 ## License

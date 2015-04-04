@@ -29,8 +29,10 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/handlers"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers"
+	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
+	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/version"
 )
 
@@ -53,13 +55,13 @@ func main() {
 	cfg, err := config.NewConfig()
 	if err != nil {
 		log.Error("Error loading config", "err", err)
-		os.Exit(1)
+		os.Exit(exitcodes.ExitTerminal)
 	}
 
 	if *versionFlag {
 		versionableEngine := engine.NewTaskEngine(cfg)
 		version.PrintVersion(versionableEngine)
-		os.Exit(0)
+		os.Exit(exitcodes.ExitSuccess)
 	}
 
 	var currentEc2InstanceID, containerInstanceArn string
@@ -73,13 +75,13 @@ func main() {
 		previousState, err := initializeStateManager(cfg, previousTaskEngine, &previousCluster, &previousContainerInstanceArn, &previousEc2InstanceID)
 		if err != nil {
 			log.Crit("Error creating state manager", "err", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitTerminal)
 		}
 
 		err = previousState.Load()
 		if err != nil {
 			log.Crit("Error loading previously saved state", "err", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitTerminal)
 		}
 
 		if previousCluster != "" {
@@ -90,7 +92,7 @@ func main() {
 			}
 			if previousCluster != configuredCluster {
 				log.Crit("Data mismatch; saved cluster does not match configured cluster. Perhaps you want to delete the configured checkpoint file?", "saved", previousCluster, "configured", configuredCluster)
-				os.Exit(1)
+				os.Exit(exitcodes.ExitTerminal)
 			}
 			cfg.Cluster = previousCluster
 			log.Info("Restored cluster", "cluster", cfg.Cluster)
@@ -120,7 +122,7 @@ func main() {
 	stateManager, err := initializeStateManager(cfg, taskEngine, &cfg.Cluster, &containerInstanceArn, &currentEc2InstanceID)
 	if err != nil {
 		log.Crit("Error creating state manager", "err", err)
-		os.Exit(1)
+		os.Exit(exitcodes.ExitTerminal)
 	}
 
 	credentialProvider := auth.NewBasicAWSCredentialProvider()
@@ -131,7 +133,10 @@ func main() {
 		containerInstanceArn, err = client.RegisterContainerInstance()
 		if err != nil {
 			log.Error("Error registering", "err", err)
-			os.Exit(1)
+			if retriable, ok := err.(utils.Retriable); ok && !retriable.Retry() {
+				os.Exit(exitcodes.ExitTerminal)
+			}
+			os.Exit(exitcodes.ExitError)
 		}
 		log.Info("Registration completed successfully", "containerInstance", containerInstanceArn, "cluster", cfg.Cluster)
 		// Save our shiny new containerInstanceArn
@@ -144,7 +149,7 @@ func main() {
 	taskEngine.SetSaver(stateManager)
 	taskEngine.MustInit()
 
-	sighandlers.StartTerminationHandler(stateManager)
+	go sighandlers.StartTerminationHandler(stateManager, taskEngine)
 
 	// Agent introspection api
 	go handlers.ServeHttp(&containerInstanceArn, taskEngine, cfg)
@@ -160,7 +165,7 @@ func main() {
 	err = acshandler.StartSession(containerInstanceArn, credentialProvider, cfg, taskEngine, client, stateManager, *acceptInsecureCert)
 	if err != nil {
 		log.Crit("Unretriable error starting communicating with ACS", "err", err)
-		os.Exit(1)
+		os.Exit(exitcodes.ExitTerminal)
 	}
 }
 

@@ -100,7 +100,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	// Create a container to get the container id.
 	container, err := createGremlin(client)
 	if err != nil {
-		t.Error("Error creating container", err)
+		t.Fatal("Error creating container", err)
 	}
 	defer client.RemoveContainer(docker.RemoveContainerOptions{
 		ID:    container.ID,
@@ -171,7 +171,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	}
 	container, err := createGremlin(client)
 	if err != nil {
-		t.Error("Error creating container", err)
+		t.Fatal("Error creating container", err)
 	}
 	defer client.RemoveContainer(docker.RemoveContainerOptions{
 		ID:    container.ID,
@@ -236,7 +236,7 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	taskEngine := engine.NewTaskEngine(&config.Config{})
 	container, err := createGremlin(client)
 	if err != nil {
-		t.Error("Error creating container", err)
+		t.Fatal("Error creating container", err)
 	}
 	defer client.RemoveContainer(docker.RemoveContainerOptions{
 		ID:    container.ID,
@@ -244,7 +244,7 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	})
 	unmappedContainer, err := createGremlin(client)
 	if err != nil {
-		t.Error("Error creating container", err)
+		t.Fatal("Error creating container", err)
 	}
 	defer client.RemoveContainer(docker.RemoveContainerOptions{
 		ID:    unmappedContainer.ID,

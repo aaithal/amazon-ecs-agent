@@ -24,6 +24,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	ecsengine "github.com/aws/amazon-ecs-agent/agent/engine"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
+	"github.com/aws/amazon-ecs-agent/agent/stats/resolver/mock"
 )
 
 const defaultClusterArn = "default"
@@ -45,7 +46,8 @@ func (engine *MockTaskEngine) TaskEvents() <-chan api.ContainerStateChange {
 func (engine *MockTaskEngine) SetSaver(statemanager.Saver) {
 }
 
-func (engine *MockTaskEngine) AddTask(*api.Task) {
+func (engine *MockTaskEngine) AddTask(*api.Task) error {
+	return nil
 }
 
 func (engine *MockTaskEngine) ListTasks() ([]*api.Task, error) {
@@ -62,6 +64,9 @@ func (engine *MockTaskEngine) MarshalJSON() ([]byte, error) {
 
 func (engine *MockTaskEngine) Version() (string, error) {
 	return "", nil
+}
+
+func (engine *MockTaskEngine) Disable() {
 }
 
 func validateContainerMetrics(containerMetrics []ContainerMetric, expected int) error {
@@ -83,7 +88,7 @@ func validateContainerMetrics(containerMetrics []ContainerMetric, expected int) 
 func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	resolver := NewMockContainerMetadataResolver(mockCtrl)
+	resolver := mock_resolver.NewMockContainerMetadataResolver(mockCtrl)
 	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
 	resolver.EXPECT().ResolveTask("c2").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
 	resolver.EXPECT().ResolveTask("c3").AnyTimes().Return(&api.Task{Arn: "t2"}, nil)
@@ -209,7 +214,7 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	resolver := NewMockContainerMetadataResolver(mockCtrl)
+	resolver := mock_resolver.NewMockContainerMetadataResolver(mockCtrl)
 	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
 	resolver.EXPECT().ResolveName("c1").AnyTimes().Return("n-c1", nil)
 
@@ -278,7 +283,7 @@ func TestStatsEngineUninitialized(t *testing.T) {
 func TestStatsEngineTerminalTask(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
-	resolver := NewMockContainerMetadataResolver(mockCtrl)
+	resolver := mock_resolver.NewMockContainerMetadataResolver(mockCtrl)
 	resolver.EXPECT().ResolveTask("c1").Return(&api.Task{Arn: "t1", KnownStatus: api.TaskStopped}, nil)
 	engine := NewDockerStatsEngine()
 	engine.resolver = resolver

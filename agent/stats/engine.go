@@ -13,7 +13,7 @@
 
 package stats
 
-//go:generate mockgen.sh $GOPACKAGE $GOFILE
+//go:generate mockgen.sh github.com/aws/amazon-ecs-agent/agent/stats Engine mock/$GOFILE
 
 import (
 	"errors"
@@ -24,6 +24,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	ecsengine "github.com/aws/amazon-ecs-agent/agent/engine"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
+	"github.com/aws/amazon-ecs-agent/agent/stats/resolver"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/fsouza/go-dockerclient"
 )
@@ -39,12 +40,6 @@ const (
 )
 
 var log = logger.ForModule("stats")
-
-// ContainerMetadataResolver defines methods to resolve meta-data.
-type ContainerMetadataResolver interface {
-	ResolveTask(string) (*api.Task, error)
-	ResolveName(string) (string, error)
-}
 
 // DockerContainerMetadataResolver implements ContainerMetadataResolver for
 // DockerTaskEngine.
@@ -66,7 +61,7 @@ type DockerStatsEngine struct {
 	dockerEventListener chan *docker.APIEvents
 	events              <-chan ecsengine.DockerContainerChangeEvent
 	instanceMetadata    *InstanceMetadata
-	resolver            ContainerMetadataResolver
+	resolver            resolver.ContainerMetadataResolver
 	// tasksToContainers maps task arns to a map of container ids to CronContainer objects.
 	tasksToContainers map[string]map[string]*CronContainer
 }
