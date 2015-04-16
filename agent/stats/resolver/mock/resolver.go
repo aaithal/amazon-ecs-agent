@@ -17,8 +17,8 @@
 package mock_resolver
 
 import (
-	gomock "code.google.com/p/gomock/gomock"
 	api "github.com/aws/amazon-ecs-agent/agent/api"
+	gomock "code.google.com/p/gomock/gomock"
 )
 
 // Mock of ContainerMetadataResolver interface

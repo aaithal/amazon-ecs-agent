@@ -75,10 +75,12 @@ func (collector *MockStatsCollector) getContainerStats(container *CronContainer)
 
 func TestContainerStatsAggregation(t *testing.T) {
 	var container *CronContainer
+	dockerID := "container1"
+	name := "docker-container1"
 	container = &CronContainer{
 		containerMetadata: &ContainerMetadata{
-			DockerID: "container1",
-			Name:     "docker-container1",
+			DockerID: &dockerID,
+			Name:     &name,
 		},
 	}
 	container.statsCollector = newMockStatsCollector()
@@ -89,33 +91,33 @@ func TestContainerStatsAggregation(t *testing.T) {
 	if err != nil {
 		t.Error("Error gettting cpu stats set:", err)
 	}
-	if cpuStatsSet.Min == math.MaxFloat32 || IsNaN32(cpuStatsSet.Min) {
-		t.Error("Min value incorrectly set: ", cpuStatsSet.Min)
+	if *cpuStatsSet.Min == math.MaxFloat64 || math.IsNaN(*cpuStatsSet.Min) {
+		t.Error("Min value incorrectly set: ", *cpuStatsSet.Min)
 	}
-	if cpuStatsSet.Max == -math.MaxFloat32 || IsNaN32(cpuStatsSet.Max) {
-		t.Error("Max value incorrectly set: ", cpuStatsSet.Max)
+	if *cpuStatsSet.Max == -math.MaxFloat64 || math.IsNaN(*cpuStatsSet.Max) {
+		t.Error("Max value incorrectly set: ", *cpuStatsSet.Max)
 	}
-	if cpuStatsSet.SampleCount == 0 {
+	if *cpuStatsSet.SampleCount == 0 {
 		t.Error("Samplecount is 0")
 	}
-	if cpuStatsSet.Sum == 0 {
-		t.Error("Sum value incorrectly set: ", cpuStatsSet.Sum)
+	if *cpuStatsSet.Sum == 0 {
+		t.Error("Sum value incorrectly set: ", *cpuStatsSet.Sum)
 	}
 
 	memStatsSet, err := container.statsQueue.GetMemoryStatsSet()
 	if err != nil {
 		t.Error("Error gettting cpu stats set:", err)
 	}
-	if memStatsSet.Min == math.MaxUint32 {
-		t.Error("Min value incorrectly set: ", memStatsSet.Min)
+	if *memStatsSet.Min == math.MaxFloat64 {
+		t.Error("Min value incorrectly set: ", *memStatsSet.Min)
 	}
-	if memStatsSet.Max == 0 {
-		t.Error("Max value incorrectly set: ", memStatsSet.Max)
+	if *memStatsSet.Max == 0 {
+		t.Error("Max value incorrectly set: ", *memStatsSet.Max)
 	}
-	if memStatsSet.SampleCount == 0 {
+	if *memStatsSet.SampleCount == 0 {
 		t.Error("Samplecount is 0")
 	}
-	if memStatsSet.Sum == 0 {
-		t.Error("Sum value incorrectly set: ", memStatsSet.Sum)
+	if *memStatsSet.Sum == 0 {
+		t.Error("Sum value incorrectly set: ", *memStatsSet.Sum)
 	}
 }

@@ -21,14 +21,20 @@ import (
 	"time"
 
 	"code.google.com/p/gomock/gomock"
+	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	ecsengine "github.com/aws/amazon-ecs-agent/agent/engine"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
-	"github.com/aws/amazon-ecs-agent/agent/stats/resolver/mock"
+	mock_resolver "github.com/aws/amazon-ecs-agent/agent/stats/resolver/mock"
 )
 
-const defaultClusterArn = "default"
-const defaultContainerInstanceArn = "ci"
+var defaultCluster string
+var defaultContainerInstance string
+
+func init() {
+	defaultCluster = "default"
+	defaultContainerInstance = "ci"
+}
 
 type MockTaskEngine struct {
 }
@@ -69,19 +75,18 @@ func (engine *MockTaskEngine) Version() (string, error) {
 func (engine *MockTaskEngine) Disable() {
 }
 
-func validateContainerMetrics(containerMetrics []ContainerMetric, expected int) error {
+func validateContainerMetrics(containerMetrics []*ecstcs.ContainerMetric, expected int) error {
 	if len(containerMetrics) != expected {
 		return fmt.Errorf("Mismatch in number of ContainerStatsSet elements. Expected: %d, Got: %d", expected, len(containerMetrics))
 	}
 	for _, containerMetric := range containerMetrics {
-		if containerMetric.CPUStatsSet == nil {
+		if containerMetric.CpuStatsSet == nil {
 			return fmt.Errorf("CPUStatsSet is nil")
 		}
 		if containerMetric.MemoryStatsSet == nil {
 			return fmt.Errorf("MemoryStatsSet is nil")
 		}
 	}
-
 	return nil
 }
 
@@ -146,12 +151,22 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
 	}
-	instanceMetrics, err := engine.GetInstanceMetrics()
+
+	metadata, taskMetrics, err := engine.GetInstanceMetrics()
 	if err != nil {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	taskMetrics := instanceMetrics.TaskMetrics
+	if metadata == nil {
+		t.Error("Metadata is nil")
+	}
+	if *metadata.Cluster != defaultCluster {
+		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
+	}
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
+	}
+
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
@@ -159,8 +174,8 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
 	}
-	if taskMetrics[0].TaskArn != "t1" {
-		t.Error("Incorrect task arn. Expected: t1, got: ", taskMetrics[0].TaskArn)
+	if *taskMetrics[0].TaskArn != "t1" {
+		t.Error("Incorrect task arn. Expected: t1, got: ", *taskMetrics[0].TaskArn)
 	}
 
 	// Ensure that only valid task shows up in metrics.
@@ -188,7 +203,7 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 		t.Error("Container c3 not found in engine")
 	}
 
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -197,7 +212,7 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	// Should get an error while adding this container due to unmapped
 	// container to task.
 	engine.AddContainer("c4")
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -205,7 +220,7 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	// Should get an error while adding this container due to unmapped
 	// container to name.
 	engine.AddContainer("c5")
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -220,7 +235,7 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 
 	engine := NewDockerStatsEngine()
 	engine.resolver = resolver
-	engine.instanceMetadata = newInstanceMetadata(defaultClusterArn, defaultContainerInstanceArn)
+	engine.metricsMetadata = newMetricsMetadata(&defaultCluster, &defaultContainerInstance)
 	engine.AddContainer("c1")
 	containerStats := []*ContainerStats{
 		CreateContainerStats(22400432, 1839104, ParseNanoTime("2015-02-12T21:22:05.131117533Z")),
@@ -232,11 +247,10 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 			cronContainer.statsQueue.Add(containerStats[i])
 		}
 	}
-	instanceMetrics, err := engine.GetInstanceMetrics()
+	metadata, taskMetrics, err := engine.GetInstanceMetrics()
 	if err != nil {
 		t.Error("Error gettting instance metrics: ", err)
 	}
-	taskMetrics := instanceMetrics.TaskMetrics
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
@@ -244,18 +258,18 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
 	}
-	if taskMetrics[0].TaskArn != "t1" {
-		t.Error("Incorrect task arn. Expected: t1, got: ", taskMetrics[0].TaskArn)
+	if *taskMetrics[0].TaskArn != "t1" {
+		t.Error("Incorrect task arn. Expected: t1, got: ", *taskMetrics[0].TaskArn)
 	}
-	if instanceMetrics.Metadata.ClusterArn != defaultClusterArn {
-		t.Errorf("Cluster Arn not set in metadata. Expected: %s, got: %s", defaultClusterArn, instanceMetrics.Metadata.ClusterArn)
+	if *metadata.Cluster != defaultCluster {
+		t.Errorf("Cluster Arn not set in metadata. Expected: %s, got: %s", defaultCluster, *metadata.Cluster)
 	}
-	if instanceMetrics.Metadata.ContainerInstanceArn != defaultContainerInstanceArn {
-		t.Errorf("Container Instance Arn not set in metadata. Expected: %s, got: %s", defaultContainerInstanceArn, instanceMetrics.Metadata.ContainerInstanceArn)
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Errorf("Container Instance Arn not set in metadata. Expected: %s, got: %s", defaultContainerInstance, *metadata.ContainerInstance)
 	}
 
 	engine.RemoveContainer("c1")
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -274,7 +288,7 @@ func TestStatsEngineUninitialized(t *testing.T) {
 	engine := NewDockerStatsEngine()
 	engine.resolver = &DockerContainerMetadataResolver{}
 	engine.AddContainer("c1")
-	_, err := engine.GetInstanceMetrics()
+	_, _, err := engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -289,7 +303,7 @@ func TestStatsEngineTerminalTask(t *testing.T) {
 	engine.resolver = resolver
 
 	engine.AddContainer("c1")
-	_, err := engine.GetInstanceMetrics()
+	_, _, err := engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -320,22 +334,22 @@ func TestStatsEngineClientErrorListingContainers(t *testing.T) {
 func TestStatsEngineDisabledEnvVar(t *testing.T) {
 	os.Unsetenv("ECS_DISABLE_METRICS")
 	setMetricCollectionFlag()
-	if IsMetricCollectionDisabled() {
+	if !IsMetricCollectionEnabled() {
 		t.Error("Stats engine disabled when ECS_DISABLE_METRICS is not set")
 	}
 	os.Setenv("ECS_DISABLE_METRICS", "opinion")
 	setMetricCollectionFlag()
-	if IsMetricCollectionDisabled() {
+	if !IsMetricCollectionEnabled() {
 		t.Error("Stats engine disabled when ECS_DISABLE_METRICS is neither true nor false")
 	}
 	os.Setenv("ECS_DISABLE_METRICS", "false")
 	setMetricCollectionFlag()
-	if IsMetricCollectionDisabled() {
+	if !IsMetricCollectionEnabled() {
 		t.Error("Stats engine disabled when ECS_DISABLE_METRICS is false")
 	}
 	os.Setenv("ECS_DISABLE_METRICS", "true")
 	setMetricCollectionFlag()
-	if !IsMetricCollectionDisabled() {
+	if IsMetricCollectionEnabled() {
 		t.Error("Stats engine enabled when ECS_DISABLE_METRICS is true")
 	}
 }

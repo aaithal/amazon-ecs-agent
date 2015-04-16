@@ -25,21 +25,6 @@ func NaN32() float32 {
 	return (float32)(math.NaN())
 }
 
-// IsNaN32 reports whether value is a “not-a-number” value.
-func IsNaN32(value float32) bool {
-	return math.IsNaN((float64)(value))
-}
-
-// Min32 returns the smaller of x or y.
-func Min32(x, y float32) float32 {
-	return (float32)(math.Min((float64)(x), (float64)(y)))
-}
-
-// Max32 returns the larger of the x or y.
-func Max32(x, y float32) float32 {
-	return (float32)(math.Max((float64)(x), (float64)(y)))
-}
-
 // ToContainerStats returns a new object of the ContainerStats object from libcontainer stats.
 func ToContainerStats(containerStats libcontainer.ContainerStats) *ContainerStats {
 	return &ContainerStats{

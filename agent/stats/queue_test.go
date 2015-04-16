@@ -132,34 +132,34 @@ func TestQueueAddRemove(t *testing.T) {
 	if err != nil {
 		t.Error("Error gettting cpu stats set:", err)
 	}
-	if cpuStatsSet.Min == math.MaxFloat32 || IsNaN32(cpuStatsSet.Min) {
-		t.Error("Min value incorrectly set: ", cpuStatsSet.Min)
+	if *cpuStatsSet.Min == math.MaxFloat64 || math.IsNaN(*cpuStatsSet.Min) {
+		t.Error("Min value incorrectly set: ", *cpuStatsSet.Min)
 	}
-	if cpuStatsSet.Max == -math.MaxFloat32 || IsNaN32(cpuStatsSet.Max) {
-		t.Error("Max value incorrectly set: ", cpuStatsSet.Max)
+	if *cpuStatsSet.Max == -math.MaxFloat64 || math.IsNaN(*cpuStatsSet.Max) {
+		t.Error("Max value incorrectly set: ", *cpuStatsSet.Max)
 	}
-	if cpuStatsSet.SampleCount != queueLength {
-		t.Error("Expected samplecount: ", queueLength, " got: ", cpuStatsSet.SampleCount)
+	if *cpuStatsSet.SampleCount != int64(queueLength) {
+		t.Error("Expected samplecount: ", queueLength, " got: ", *cpuStatsSet.SampleCount)
 	}
-	if cpuStatsSet.Sum == 0 {
-		t.Error("Sum value incorrectly set: ", cpuStatsSet.Sum)
+	if *cpuStatsSet.Sum == 0 {
+		t.Error("Sum value incorrectly set: ", *cpuStatsSet.Sum)
 	}
 
 	memStatsSet, err := queue.GetMemoryStatsSet()
 	if err != nil {
 		t.Error("Error gettting cpu stats set:", err)
 	}
-	if memStatsSet.Min == math.MaxUint32 {
-		t.Error("Min value incorrectly set: ", memStatsSet.Min)
+	if *memStatsSet.Min == float64(-math.MaxFloat32) {
+		t.Error("Min value incorrectly set: ", *memStatsSet.Min)
 	}
-	if memStatsSet.Max == 0 {
-		t.Error("Max value incorrectly set: ", memStatsSet.Max)
+	if *memStatsSet.Max == 0 {
+		t.Error("Max value incorrectly set: ", *memStatsSet.Max)
 	}
-	if memStatsSet.SampleCount != queueLength {
-		t.Error("Expected samplecount: ", queueLength, " got: ", memStatsSet.SampleCount)
+	if *memStatsSet.SampleCount != int64(queueLength) {
+		t.Error("Expected samplecount: ", queueLength, " got: ", *memStatsSet.SampleCount)
 	}
-	if memStatsSet.Sum == 0 {
-		t.Error("Sum value incorrectly set: ", memStatsSet.Sum)
+	if *memStatsSet.Sum == 0 {
+		t.Error("Sum value incorrectly set: ", *memStatsSet.Sum)
 	}
 
 	rawUsageStats, err := queue.GetRawUsageStats(2 * queueLength)

@@ -17,8 +17,8 @@
 package mock_stats
 
 import (
+	ecstcs "github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 	gomock "code.google.com/p/gomock/gomock"
-	stats "github.com/aws/amazon-ecs-agent/agent/stats"
 )
 
 // Mock of Engine interface
@@ -42,11 +42,12 @@ func (_m *MockEngine) EXPECT() *_MockEngineRecorder {
 	return _m.recorder
 }
 
-func (_m *MockEngine) GetInstanceMetrics() (*stats.InstanceMetrics, error) {
+func (_m *MockEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, []*ecstcs.TaskMetric, error) {
 	ret := _m.ctrl.Call(_m, "GetInstanceMetrics")
-	ret0, _ := ret[0].(*stats.InstanceMetrics)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(*ecstcs.MetricsMetadata)
+	ret1, _ := ret[1].([]*ecstcs.TaskMetric)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 func (_mr *_MockEngineRecorder) GetInstanceMetrics() *gomock.Call {

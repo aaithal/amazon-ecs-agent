@@ -20,6 +20,7 @@ import (
 	"time"
 
 	acshandler "github.com/aws/amazon-ecs-agent/agent/acs/handler"
+	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	"github.com/aws/amazon-ecs-agent/agent/auth"
 	"github.com/aws/amazon-ecs-agent/agent/config"
@@ -32,8 +33,10 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
+	"github.com/aws/amazon-ecs-agent/agent/tcs"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/version"
+	log15 "gopkg.in/inconshreveable/log15.v2"
 )
 
 func init() {
@@ -157,9 +160,8 @@ func main() {
 	// Start sending events to the backend
 	go eventhandler.HandleEngineEvents(taskEngine, client, stateManager)
 
-	if !stats.IsMetricCollectionDisabled() {
-		// TODO: Initialize stats engine.
-	}
+	// Start metrics session in a go routine
+	go startMetricsSession(taskEngine, &cfg.Cluster, &containerInstanceArn, log)
 
 	log.Info("Beginning Polling for updates")
 	err = acshandler.StartSession(containerInstanceArn, credentialProvider, cfg, taskEngine, client, stateManager, *acceptInsecureCert)
@@ -183,4 +185,24 @@ func initializeStateManager(cfg *config.Config, taskEngine engine.TaskEngine, cl
 		return nil, err
 	}
 	return stateManager, nil
+}
+
+func startMetricsSession(taskEngine engine.TaskEngine, cluster, containerInstanceArn *string, log log15.Logger) {
+	if stats.IsMetricCollectionEnabled() {
+		statsEngine := stats.NewDockerStatsEngine()
+		err := statsEngine.MustInit(taskEngine, &ecstcs.MetricsMetadata{
+			Cluster:           cluster,
+			ContainerInstance: containerInstanceArn,
+		})
+
+		if err != nil {
+			log.Warn("Error initializing metrics engine", "err", err)
+			return
+		}
+		err = tcs.StartSession(statsEngine)
+		if err != nil {
+			log.Warn("Error starting metrics session with backend", "err", err)
+			return
+		}
+	}
 }

@@ -22,7 +22,7 @@ import (
 
 	acsclient "github.com/aws/amazon-ecs-agent/agent/acs/client"
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
-	"github.com/aws/amazon-ecs-agent/agent/acs/update_handler"
+	updater "github.com/aws/amazon-ecs-agent/agent/acs/update_handler"
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4/credentials"
@@ -32,6 +32,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/version"
+	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
 )
 
 var log = logger.ForModule("acs handler")
@@ -84,7 +85,7 @@ func heartbeatHandler(acsConnection io.Closer) func(*ecsacs.HeartbeatMessage) {
 // takes given payloads, converts them into the internal representation of
 // tasks, and passes them on to the task engine. If there is an issue handling a
 // task, it is moved to stopped. If a task is handled, state is saved.
-func payloadMessageHandler(cs acsclient.ClientServer, cluster, containerInstanceArn string, taskEngine engine.TaskEngine, client api.ECSClient, stateManager statemanager.Saver) func(payload *ecsacs.PayloadMessage) {
+func payloadMessageHandler(cs wsclient.ClientServer, cluster, containerInstanceArn string, taskEngine engine.TaskEngine, client api.ECSClient, stateManager statemanager.Saver) func(payload *ecsacs.PayloadMessage) {
 	return func(payload *ecsacs.PayloadMessage) {
 		for _, task := range payload.Tasks {
 			if task == nil {

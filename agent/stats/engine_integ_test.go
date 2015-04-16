@@ -115,6 +115,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	time.Sleep(checkPointSleep)
 
 	engine.resolver = resolver
+	engine.metricsMetadata = newMetricsMetadata(&defaultCluster, &defaultContainerInstance)
 
 	err = client.StartContainer(container.ID, nil)
 	if err != nil {
@@ -132,12 +133,21 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	instanceMetrics, err := engine.GetInstanceMetrics()
+	metadata, taskMetrics, err := engine.GetInstanceMetrics()
 	if err != nil {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	taskMetrics := instanceMetrics.TaskMetrics
+	if metadata == nil {
+		t.Fatal("Metadata is nil")
+	}
+	if *metadata.Cluster != defaultCluster {
+		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
+	}
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
+	}
+
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
@@ -154,7 +164,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -201,15 +211,24 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	instanceMetrics, err := engine.GetInstanceMetrics()
+	metadata, taskMetrics, err := engine.GetInstanceMetrics()
 	if err != nil {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	taskMetrics := instanceMetrics.TaskMetrics
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
+	if metadata == nil {
+		t.Fatal("Metadata is nil")
+	}
+	if *metadata.Cluster != defaultCluster {
+		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
+	}
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
+	}
+
 	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
@@ -223,7 +242,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, err = engine.GetInstanceMetrics()
+	_, _, err = engine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
@@ -274,7 +293,7 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 		},
 		&testTask)
 	statsEngine := NewDockerStatsEngine()
-	err = statsEngine.MustInit(taskEngine, newInstanceMetadata(defaultClusterArn, defaultContainerInstanceArn))
+	err = statsEngine.MustInit(taskEngine, newMetricsMetadata(&defaultCluster, &defaultContainerInstance))
 	if err != nil {
 		t.Error("Error initializing stats engine: ", err)
 	}
@@ -294,15 +313,24 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	// Wait for the stats collection go routine to start.
 	time.Sleep(checkPointSleep)
 
-	instanceMetrics, err := statsEngine.GetInstanceMetrics()
+	metadata, taskMetrics, err := statsEngine.GetInstanceMetrics()
 	if err != nil {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	taskMetrics := instanceMetrics.TaskMetrics
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
+	if metadata == nil {
+		t.Fatal("Metadata is nil")
+	}
+	if *metadata.Cluster != defaultCluster {
+		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
+	}
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
+	}
+
 	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
@@ -316,7 +344,7 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, err = statsEngine.GetInstanceMetrics()
+	_, _, err = statsEngine.GetInstanceMetrics()
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}

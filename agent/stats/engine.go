@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	ecsengine "github.com/aws/amazon-ecs-agent/agent/engine"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
@@ -50,7 +51,7 @@ type DockerContainerMetadataResolver struct {
 // Engine defines methods to be implemented by the engine struct. It is
 // defined to make testing easier.
 type Engine interface {
-	GetInstanceMetrics() (*InstanceMetrics, error)
+	GetInstanceMetrics() (*ecstcs.MetricsMetadata, []*ecstcs.TaskMetric, error)
 }
 
 // DockerStatsEngine is used to monitor docker container events and to report
@@ -60,7 +61,7 @@ type DockerStatsEngine struct {
 	containersLock      sync.RWMutex
 	dockerEventListener chan *docker.APIEvents
 	events              <-chan ecsengine.DockerContainerChangeEvent
-	instanceMetadata    *InstanceMetadata
+	metricsMetadata     *ecstcs.MetricsMetadata
 	resolver            resolver.ContainerMetadataResolver
 	// tasksToContainers maps task arns to a map of container ids to CronContainer objects.
 	tasksToContainers map[string]map[string]*CronContainer
@@ -76,10 +77,10 @@ func init() {
 	setMetricCollectionFlag()
 }
 
-// IsMetricCollectionDisabled returns true if the ECS_DISABLE_METRICS is set to "false".
+// IsMetricCollectionEnabled returns true if the ECS_DISABLE_METRICS is set to "false".
 // Else, it returns true.
-func IsMetricCollectionDisabled() bool {
-	return isMetricCollectionDisabled
+func IsMetricCollectionEnabled() bool {
+	return !isMetricCollectionDisabled
 }
 
 // ResolveTask resolves the task arn, given container id.
@@ -123,14 +124,14 @@ func NewDockerStatsEngine() *DockerStatsEngine {
 }
 
 // MustInit initializes fields of the DockerStatsEngine object.
-func (engine *DockerStatsEngine) MustInit(taskEngine ecsengine.TaskEngine, imd *InstanceMetadata) error {
+func (engine *DockerStatsEngine) MustInit(taskEngine ecsengine.TaskEngine, md *ecstcs.MetricsMetadata) error {
 	log.Info("Initializing stats engine")
 	err := engine.initDockerClient()
 	if err != nil {
 		return err
 	}
 
-	engine.instanceMetadata = imd
+	engine.metricsMetadata = md
 
 	engine.resolver, err = newDockerContainerMetadataResolver(taskEngine)
 	if err != nil {
@@ -213,7 +214,7 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 		return
 	}
 	log.Debug("Adding container to stats watch list", "id", dockerID, "task", task.Arn)
-	container := newCronContainer(dockerID, containerName)
+	container := newCronContainer(&dockerID, &containerName)
 	engine.tasksToContainers[task.Arn][dockerID] = container
 	container.StartStatsCron()
 }
@@ -240,7 +241,7 @@ func (engine *DockerStatsEngine) RemoveContainer(dockerID string) {
 	// task arn exists in map.
 	container, containerExists := engine.tasksToContainers[task.Arn][dockerID]
 	if !containerExists {
-		// container arn exists in map.
+		// container arn does not exist in map.
 		log.Debug("Container not being watched", "id", dockerID)
 		return
 	}
@@ -257,8 +258,8 @@ func (engine *DockerStatsEngine) RemoveContainer(dockerID string) {
 }
 
 // GetInstanceMetrics gets all task metrics and instance metadata from stats engine.
-func (engine *DockerStatsEngine) GetInstanceMetrics() (*InstanceMetrics, error) {
-	var taskMetrics []TaskMetric
+func (engine *DockerStatsEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, []*ecstcs.TaskMetric, error) {
+	var taskMetrics []*ecstcs.TaskMetric
 	for taskArn := range engine.tasksToContainers {
 		containerMetrics, err := engine.getContainerMetricsForTask(taskArn)
 		if err != nil {
@@ -271,20 +272,17 @@ func (engine *DockerStatsEngine) GetInstanceMetrics() (*InstanceMetrics, error) 
 			continue
 		}
 
-		taskMetrics = append(taskMetrics, TaskMetric{
-			TaskArn:          taskArn,
+		taskMetrics = append(taskMetrics, &ecstcs.TaskMetric{
+			TaskArn:          &taskArn,
 			ContainerMetrics: containerMetrics,
 		})
 	}
 
 	if len(taskMetrics) == 0 {
-		return nil, errors.New("No tasks to report")
+		return nil, nil, errors.New("No tasks to report")
 	}
 
-	return &InstanceMetrics{
-		Metadata:    engine.instanceMetadata,
-		TaskMetrics: taskMetrics,
-	}, nil
+	return engine.metricsMetadata, taskMetrics, nil
 }
 
 // initDockerClient initializes engine's docker client.
@@ -369,7 +367,7 @@ func setMetricCollectionFlag() {
 }
 
 // getContainerMetricsForTask gets all container metrics for a task arn.
-func (engine *DockerStatsEngine) getContainerMetricsForTask(taskArn string) ([]ContainerMetric, error) {
+func (engine *DockerStatsEngine) getContainerMetricsForTask(taskArn string) ([]*ecstcs.ContainerMetric, error) {
 	engine.containersLock.Lock()
 	defer engine.containersLock.Unlock()
 
@@ -378,7 +376,7 @@ func (engine *DockerStatsEngine) getContainerMetricsForTask(taskArn string) ([]C
 		return nil, errors.New("Task not found")
 	}
 
-	var containerMetrics []ContainerMetric
+	var containerMetrics []*ecstcs.ContainerMetric
 	for _, container := range containerMap {
 		// Get CPU stats set.
 		cpuStatsSet, err := container.statsQueue.GetCPUStatsSet()
@@ -394,23 +392,22 @@ func (engine *DockerStatsEngine) getContainerMetricsForTask(taskArn string) ([]C
 			continue
 		}
 
-		cpuStatsSet.Unit = CPUUsageUnit
-		memoryStatsSet.Unit = MemoryUsageUnit
-
-		containerMetrics = append(containerMetrics, ContainerMetric{
-			ContainerMetadata: container.containerMetadata,
-			CPUStatsSet:       cpuStatsSet,
-			MemoryStatsSet:    memoryStatsSet,
+		containerMetrics = append(containerMetrics, &ecstcs.ContainerMetric{
+			Metadata: &ecstcs.ContainerMetadata{
+				Name: container.containerMetadata.Name,
+			},
+			CpuStatsSet:    cpuStatsSet,
+			MemoryStatsSet: memoryStatsSet,
 		})
 	}
 
 	return containerMetrics, nil
 }
 
-// newInstanceMetadata creates the singleton metadata object.
-func newInstanceMetadata(clusterArn string, containerInstanceArn string) *InstanceMetadata {
-	return &InstanceMetadata{
-		ClusterArn:           clusterArn,
-		ContainerInstanceArn: containerInstanceArn,
+// newMetricsMetadata creates the singleton metadata object.
+func newMetricsMetadata(cluster *string, containerInstance *string) *ecstcs.MetricsMetadata {
+	return &ecstcs.MetricsMetadata{
+		Cluster:           cluster,
+		ContainerInstance: containerInstance,
 	}
 }

@@ -34,30 +34,10 @@ type UsageStats struct {
 	cpuUsage          uint64    `json:"-"`
 }
 
-// CPUStatsSet is the format in which CPU usage data is exported to the server.
-type CPUStatsSet struct {
-	Min         float32 `json:"min"`
-	Max         float32 `json:"max"`
-	SampleCount int     `json:"sampleCount"`
-	Sum         float32 `json:"sum"`
-	Unit        string  `json:"unit"`
-	Timestamp   int64   `json:"timestamp"`
-}
-
-// MemoryStatsSet is the format in which memory usage data is exported to the server.
-type MemoryStatsSet struct {
-	Min         uint32 `json:"min"`
-	Max         uint32 `json:"max"`
-	SampleCount int    `json:"sampleCount"`
-	Sum         uint32 `json:"sum"`
-	Unit        string `json:"unit"`
-	Timestamp   int64  `json:"timestamp"`
-}
-
 // ContainerMetadata contains meta-data information for a container.
 type ContainerMetadata struct {
-	DockerID string `json:"-"`
-	Name     string `json:"name"`
+	DockerID *string `json:"-"`
+	Name     *string `json:"name"`
 }
 
 // CronContainer abstracts methods to gather and aggregate utilization data for a container.
@@ -68,30 +48,4 @@ type CronContainer struct {
 	statePath         string
 	statsQueue        *Queue
 	statsCollector    ContainerStatsCollector
-}
-
-// InstanceMetadata contains meta-data information for the container instance.
-// ecs container agent.
-type InstanceMetadata struct {
-	ClusterArn           string `json:"cluster"`
-	ContainerInstanceArn string `json:"containerInstance"`
-}
-
-// ContainerMetric groups CPU and Memory usage metrics for a container.
-type ContainerMetric struct {
-	ContainerMetadata *ContainerMetadata `json:"metadata"`
-	CPUStatsSet       *CPUStatsSet       `json:"cpuStatsSet"`
-	MemoryStatsSet    *MemoryStatsSet    `json:"memoryStatsSet"`
-}
-
-// TaskMetric groups all containers belonging to a task and their CPU and Memory usage stats.
-type TaskMetric struct {
-	TaskArn          string            `json:"taskArn"`
-	ContainerMetrics []ContainerMetric `json:"containerMetrics"`
-}
-
-// InstanceMetrics aggregates all task metrics to publish to backend.
-type InstanceMetrics struct {
-	Metadata    *InstanceMetadata `json:"metadata"`
-	TaskMetrics []TaskMetric      `json:"taskMetrics"`
 }

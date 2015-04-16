@@ -11,15 +11,21 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package acsclient
+// Package acsclient wraps the generated aws-sdk-go client to provide marshalling
+// and unmarshalling of data over a websocket connection in the format expected
+// by ACS. It allows for bidirectional communication and acts as both a
+// client-and-server in terms of requests, but only as a client in terms of
+// connecting.
+
+package tcs
 
 import (
 	"reflect"
 
-	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
+	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 )
 
-var acsTypeMappings map[string]reflect.Type
+var tcsTypeMappings map[string]reflect.Type
 
 func init() {
 	// This list is currently *manually updated* and assumes that the generated
@@ -30,23 +36,18 @@ func init() {
 	// reflection, but that would solve this. The alternative is to either parse
 	// the .json model or the generated struct names.
 	recognizedTypes := []interface{}{
-		ecsacs.HeartbeatMessage{}, ecsacs.PayloadMessage{},
-
-		ecsacs.CloseMessage{}, ecsacs.AckRequest{},
-		ecsacs.NackRequest{},
-		ecsacs.PerformUpdateMessage{}, ecsacs.StageUpdateMessage{},
-
-		ecsacs.ServerException{},
-		ecsacs.BadRequestException{}, ecsacs.InvalidClusterException{},
-		ecsacs.InvalidInstanceException{}, ecsacs.AccessDeniedException{},
-		ecsacs.InactiveInstanceException{},
+		ecstcs.StopSessionMessage{},
+		ecstcs.AckRequest{},
+		ecstcs.PublishMetricsRequest{},
+		ecstcs.StartSessionRequest{},
+		ecstcs.ServerException{},
 	}
 
-	acsTypeMappings = make(map[string]reflect.Type)
+	tcsTypeMappings = make(map[string]reflect.Type)
 	// This produces a map of:
 	// "MyMessage": TypeOf(ecsacs.MyMessage)
 	for _, recognizedType := range recognizedTypes {
-		acsTypeMappings[reflect.TypeOf(recognizedType).Name()] = reflect.TypeOf(recognizedType)
+		tcsTypeMappings[reflect.TypeOf(recognizedType).Name()] = reflect.TypeOf(recognizedType)
 	}
 }
 
@@ -56,8 +57,8 @@ type typeMappings struct{}
 // decoder implments wsclient.TypeDecoder.
 type decoder struct{}
 
-func (dc *decoder) NewOfType(acsType string) (interface{}, bool) {
-	rtype, ok := acsTypeMappings[acsType]
+func (dc *decoder) NewOfType(tcsType string) (interface{}, bool) {
+	rtype, ok := tcsTypeMappings[tcsType]
 	if !ok {
 		return nil, false
 	}
@@ -65,5 +66,5 @@ func (dc *decoder) NewOfType(acsType string) (interface{}, bool) {
 }
 
 func (t *typeMappings) GetRecognizedTypes() map[string]reflect.Type {
-	return acsTypeMappings
+	return tcsTypeMappings
 }

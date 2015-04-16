@@ -11,39 +11,32 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package acsclient
+package tcs
 
-import (
-	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
-	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
-)
+import wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
 
-const errType = "ACSError"
+const errType = "TCSError"
 
-// ACSUnretriableErrors wraps all the typed errors that ACS may return
-type ACSUnretriableErrors struct{}
+// UnretriableErrors wraps all the typed errors that ACS may return
+type UnretriableErrors struct{}
 
 // Get gets the list of unretriable error types.
-func (err *ACSUnretriableErrors) Get() []interface{} {
+func (err *UnretriableErrors) Get() []interface{} {
 	return unretriableErrors
 }
 
-// NewACSError returns an error corresponding to a typed error returned from
+// NewTcsError returns an error corresponding to a typed error returned from
 // ACS. It is expected that the passed in interface{} is really a struct which
 // has a 'Message' field of type *string. In that case, the Message will be
 // conveyed as part of the Error string as well as the type. It is safe to pass
 // anything into this constructor and it will also work reasonably well with
 // anything fulfilling the 'error' interface.
-func NewACSError(err interface{}) *wsclient.WSError {
-	return &wsclient.WSError{ErrObj: err, Type: errType, WSUnretriableErrors: &ACSUnretriableErrors{}}
+func NewTcsError(err interface{}) *wsclient.WSError {
+	return &wsclient.WSError{ErrObj: err, Type: errType, WSUnretriableErrors: &UnretriableErrors{}}
 }
 
 // These errors are all fatal and there's nothing we can do about them.
 // AccessDeniedException is actually potentially fixable because you can change
 // credentials at runtime, but still close to unretriable.
-var unretriableErrors = []interface{}{
-	&ecsacs.InvalidInstanceException{},
-	&ecsacs.InvalidClusterException{},
-	&ecsacs.InactiveInstanceException{},
-	&ecsacs.AccessDeniedException{},
-}
+// TODO: Populate this list when the json is updated with actual exceptions.
+var unretriableErrors = []interface{}{}
