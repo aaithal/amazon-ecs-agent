@@ -17,7 +17,6 @@ import (
 	"errors"
 	"math"
 	"sync"
-	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 )
@@ -124,14 +123,11 @@ func (queue *Queue) getCWStatsSet(f getUsageFunc) (*ecstcs.CWStatsSet, error) {
 		sum += perc
 	}
 
-	timestamp := time.Now()
-
 	return &ecstcs.CWStatsSet{
 		Max:         &max,
 		Min:         &min,
 		SampleCount: &sampleCount,
 		Sum:         &sum,
-		Timestamp:   &timestamp,
 	}, nil
 }
 

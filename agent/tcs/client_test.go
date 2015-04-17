@@ -178,7 +178,6 @@ func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
 							Min:         &fval,
 							SampleCount: &ival,
 							Sum:         &fval,
-							Timestamp:   &ts,
 							Unit:        &unit,
 						},
 						MemoryStatsSet: &ecstcs.CWStatsSet{
@@ -186,7 +185,6 @@ func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
 							Min:         &fval,
 							SampleCount: &ival,
 							Sum:         &fval,
-							Timestamp:   &ts,
 							Unit:        &unit,
 						},
 						Metadata: &ecstcs.ContainerMetadata{
@@ -197,5 +195,6 @@ func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
 				TaskArn: &taskArn,
 			},
 		},
+		Timestamp: &ts,
 	}
 }

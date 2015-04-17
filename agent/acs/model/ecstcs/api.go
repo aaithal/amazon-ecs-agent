@@ -34,8 +34,6 @@ type CWStatsSet struct {
 
 	Sum *float64 `locationName:"sum" type:"double"`
 
-	Timestamp *time.Time `locationName:"timestamp" type:"timestamp" timestampFormat:"unix"`
-
 	Unit *string `locationName:"unit" type:"string"`
 
 	metadataCWStatsSet `json:"-", xml:"-"`
@@ -95,6 +93,8 @@ type PublishMetricsRequest struct {
 	Metadata *MetricsMetadata `locationName:"metadata" type:"structure"`
 
 	TaskMetrics []*TaskMetric `locationName:"taskMetrics" type:"list"`
+
+	Timestamp *time.Time `locationName:"timestamp" type:"timestamp" timestampFormat:"unix"`
 
 	metadataPublishMetricsRequest `json:"-", xml:"-"`
 }

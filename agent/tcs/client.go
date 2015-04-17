@@ -227,9 +227,12 @@ func publishMetrics(cs interface{}) error {
 		return err
 	}
 
+	timestamp := time.Now()
+
 	return clsrv.MakeRequest(&ecstcs.PublishMetricsRequest{
 		Metadata:    metadata,
 		TaskMetrics: taskMetrics,
+		Timestamp:   &timestamp,
 	})
 	return nil
 }

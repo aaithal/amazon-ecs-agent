@@ -63,8 +63,7 @@
         "max":{"shape":"Double"},
         "sampleCount":{"shape":"Integer"},
         "sum":{"shape":"Double"},
-        "unit":{"shape":"String"},
-        "timestamp":{"shape":"Timestamp"}
+        "unit":{"shape":"String"}
       }
     },
     "ClientException":{
@@ -105,7 +104,8 @@
       "type":"structure",
       "members":{
         "metadata":{"shape":"MetricsMetadata"},
-        "taskMetrics":{"shape":"TaskMetrics"}
+        "taskMetrics":{"shape":"TaskMetrics"},
+        "timestamp":{"shape":"Timestamp"}
       }
     },
     "ServerException":{
