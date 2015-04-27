@@ -21,27 +21,37 @@ package tcs
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
-	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
+	"github.com/aws/amazon-ecs-agent/agent/auth"
+	"github.com/aws/amazon-ecs-agent/agent/websocket/client"
+	"github.com/aws/amazon-ecs-agent/agent/websocket/client/mock/utils"
 )
 
 type mockStatsEngine struct{}
 
 func TestFormatURL(t *testing.T) {
-	endpoint := "http://127.0.0.0.1"
-	expectedURL := endpoint + "/ws"
-	url := formatURL(endpoint)
-	if url != expectedURL {
-		t.Errorf("Expcted: %s != formatted url: %s", expectedURL, url)
+	endpoint := "http://127.0.0.0.1/"
+	wsurl := formatURL(endpoint, testClusterArn, testInstanceArn)
+
+	parsed, err := url.Parse(wsurl)
+	if err != nil {
+		t.Fatal("Should be able to parse url")
 	}
 
-	url = formatURL(endpoint + "/")
-	if url != expectedURL {
-		t.Errorf("Expcted: %s != formatted url: %s", expectedURL, url)
+	if parsed.Path != "/ws" {
+		t.Fatal("Wrong path")
+	}
+
+	if parsed.Query().Get("cluster") != testClusterArn {
+		t.Fatal("Wrong cluster")
+	}
+	if parsed.Query().Get("containerInstance") != testInstanceArn {
+		t.Fatal("Wrong cluster")
 	}
 }
 
@@ -58,7 +68,7 @@ func TestStartSession(t *testing.T) {
 
 	// Start test server.
 	closeWS := make(chan bool)
-	server, serverChan, requestChan, serverErr, err := startMockAcsServer(t, closeWS)
+	server, serverChan, requestChan, serverErr, err := mockwsutils.StartMockServer(t, closeWS)
 	defer server.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +82,13 @@ func TestStartSession(t *testing.T) {
 	}()
 
 	// Start a session with the test server.
-	sw := &sessionWrapper{url: server.URL, statsEngine: &mockStatsEngine{}}
+	sw := &sessionWrapper{
+		acceptInvalidCert:  true,
+		credentialProvider: auth.TestCredentialProvider{},
+		region:             "us-east-1",
+		url:                server.URL,
+		statsEngine:        &mockStatsEngine{},
+	}
 	go sw.startSession()
 
 	// startSession internally starts publishing metrics from the mockStatsEngine

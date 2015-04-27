@@ -65,6 +65,8 @@ type DockerStatsEngine struct {
 	resolver            resolver.ContainerMetadataResolver
 	// tasksToContainers maps task arns to a map of container ids to CronContainer objects.
 	tasksToContainers map[string]map[string]*CronContainer
+	// tasksToDefinitions maps task arns to task definiton names
+	tasksToDefinitions map[string]string
 }
 
 // dockerStatsEngine is a singleton object of DockerStatsEngine.
@@ -114,9 +116,10 @@ func (resolver *DockerContainerMetadataResolver) ResolveName(dockerID string) (s
 func NewDockerStatsEngine() *DockerStatsEngine {
 	if dockerStatsEngine == nil {
 		dockerStatsEngine = &DockerStatsEngine{
-			client:            nil,
-			resolver:          nil,
-			tasksToContainers: make(map[string]map[string]*CronContainer),
+			client:             nil,
+			resolver:           nil,
+			tasksToContainers:  make(map[string]map[string]*CronContainer),
+			tasksToDefinitions: make(map[string]string),
 		}
 	}
 
@@ -182,7 +185,12 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 	// is not terminal.
 	task, err := engine.resolver.ResolveTask(dockerID)
 	if err != nil {
-		log.Info("Could not map container to task, ignoring", "err", err, "id", dockerID)
+		log.Warn("Could not map container to task, ignoring", "err", err, "id", dockerID)
+		return
+	}
+
+	if len(task.Arn) == 0 || len(task.Family) == 0 {
+		log.Warn("Task has invalid fields", "id", dockerID)
 		return
 	}
 
@@ -216,6 +224,7 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 	log.Debug("Adding container to stats watch list", "id", dockerID, "task", task.Arn)
 	container := newCronContainer(&dockerID, &containerName)
 	engine.tasksToContainers[task.Arn][dockerID] = container
+	engine.tasksToDefinitions[task.Arn] = task.Family
 	container.StartStatsCron()
 }
 
@@ -253,6 +262,9 @@ func (engine *DockerStatsEngine) RemoveContainer(dockerID string) {
 	if len(engine.tasksToContainers[task.Arn]) == 0 {
 		// No containers in task, delete task arn from map.
 		delete(engine.tasksToContainers, task.Arn)
+		// No need to verify if the key exists in tasksToDefinitions.
+		// Delete will do nothing if the specified key doesn't exist.
+		delete(engine.tasksToDefinitions, task.Arn)
 		log.Debug("Deleted task from tasks", "arn", task.Arn)
 	}
 }
@@ -268,13 +280,20 @@ func (engine *DockerStatsEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, 
 		}
 
 		if len(containerMetrics) == 0 {
-			log.Debug("Empty containerMetrics for task, ignoring", "task", taskArn)
+			log.Warn("Empty containerMetrics for task, ignoring", "task", taskArn)
+			continue
+		}
+
+		taskDefinitionFamily, exists := engine.tasksToDefinitions[taskArn]
+		if !exists {
+			log.Warn("Could not map task to definition", "task", taskArn)
 			continue
 		}
 
 		taskMetrics = append(taskMetrics, &ecstcs.TaskMetric{
-			TaskArn:          &taskArn,
-			ContainerMetrics: containerMetrics,
+			TaskArn:              &taskArn,
+			TaskDefinitionFamily: &taskDefinitionFamily,
+			ContainerMetrics:     containerMetrics,
 		})
 	}
 

@@ -82,8 +82,8 @@ func (resolver *IntegContainerMetadataResolver) ResolveName(dockerID string) (st
 
 	return name, nil
 }
-func (resolver *IntegContainerMetadataResolver) addToMap(containerID string, taskArn string, name string) {
-	resolver.containerIDToTask[containerID] = &api.Task{Arn: taskArn}
+func (resolver *IntegContainerMetadataResolver) addToMap(containerID string, taskArn string, family string, name string) {
+	resolver.containerIDToTask[containerID] = &api.Task{Arn: taskArn, Family: family}
 	resolver.containerIDToName[containerID] = name
 }
 
@@ -109,7 +109,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin", "docker-gremlin")
+	resolver.addToMap(container.ID, "gremlin", "docker-gremlin", "gremlin")
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)
@@ -191,7 +191,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin", "docker-gremlin")
+	resolver.addToMap(container.ID, "gremlin", "docker-gremlin", "gremlin")
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)

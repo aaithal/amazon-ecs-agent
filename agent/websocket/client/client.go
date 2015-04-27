@@ -19,16 +19,39 @@
 package wsclient
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"io"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"net/url"
 	"reflect"
+	"strings"
+	"time"
 
+	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4"
+	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/awslabs/aws-sdk-go/internal/protocol/json/jsonutil"
 	"github.com/gorilla/websocket"
 )
 
 var log = logger.ForModule("ws client")
+
+const (
+	serviceName = "ecs"
+
+	// wsConnectTimeout specifies the default connection timeout to the backend.
+	wsConnectTimeout = 3 * time.Second
+
+	// readBufSize is the size of the read buffer for the ws connection.
+	readBufSize = 4096
+
+	// writeBufSize is the size of the write buffer for the ws connection.
+	writeBufSize = 4096
+)
 
 // ReceivedMessage is the intermediate message used to unmarshal a
 // message from backend
@@ -68,14 +91,77 @@ type ClientServer interface {
 
 // ClientServerImpl wraps commonly used methods defined in ClientServer interface.
 type ClientServerImpl struct {
-	ClientServer
-	Conn WebsocketConn
+	AcceptInvalidCert  bool
+	Conn               WebsocketConn
+	CredentialProvider credentials.AWSCredentialProvider
+	Region             string
 	// RequestHandlers is a map from message types to handler functions of the
 	// form:
 	//     "FooMessage": func(message *ecsacs.FooMessage)
 	RequestHandlers map[string]RequestHandler
+	// URL is the full url to the backend, including path, querystring, and so on.
+	URL string
+	ClientServer
+	ServiceError
 	TypeDecoder
 	TypeMappings
+}
+
+// Connect opens a connection to the backend and upgrades it to a websocket. Calls to
+// 'MakeRequest' can be made after calling this, but responss will not be
+// receivable until 'Serve' is also called.
+func (cs *ClientServerImpl) Connect() error {
+	parsedURL, err := url.Parse(cs.URL)
+	log.Info("Connect: ", "url", cs.URL)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Connect: ", "url", cs.URL, "parsedURL", parsedURL)
+	signer := authv4.NewHttpSigner(cs.Region, serviceName, cs.CredentialProvider, nil)
+
+	// NewRequest never returns an error if the url parses and we just verified
+	// it did above
+	request, _ := http.NewRequest("GET", cs.URL, nil)
+	signer.SignHttpRequest(request)
+
+	// url.Host might not have the port, but tls.Dial needs it
+	dialHost := parsedURL.Host
+	if !strings.Contains(dialHost, ":") {
+		dialHost += ":443"
+	}
+
+	timeoutDialer := &net.Dialer{Timeout: wsConnectTimeout}
+	log.Info("Creating poll dialer", "host", parsedURL.Host)
+	wsConn, err := tls.DialWithDialer(timeoutDialer, "tcp", dialHost, &tls.Config{InsecureSkipVerify: cs.AcceptInvalidCert})
+	if err != nil {
+		return err
+	}
+
+	websocketConn, httpResponse, err := websocket.NewClient(wsConn, parsedURL, request.Header, readBufSize, writeBufSize)
+	if httpResponse != nil {
+		defer httpResponse.Body.Close()
+	}
+	if err != nil {
+		var resp []byte
+		if httpResponse != nil {
+			var readErr error
+			resp, readErr = ioutil.ReadAll(httpResponse.Body)
+			if readErr != nil {
+				return errors.New("Unable to read websocket connection: " + readErr.Error() + ", " + err.Error())
+			}
+			// If there's a response, we can try to unmarshal it into one of the
+			// modeled error types
+			possibleError, _, decodeErr := DecodeData(resp, cs.TypeDecoder)
+			if decodeErr == nil {
+				return cs.NewError(possibleError)
+			}
+		}
+		log.Warn("Error creating a websocket client", "err", err)
+		return errors.New(string(resp) + ", " + err.Error())
+	}
+	cs.Conn = websocketConn
+	return nil
 }
 
 // AddRequestHandler adds a request handler to this client.
@@ -147,7 +233,7 @@ func (cs *ClientServerImpl) ConsumeMessages() error {
 			log.Error("Unexpected messageType", "type", messageType)
 			// maybe not fatal though, we'll try to process it anyways
 		}
-		log.Debug("Got a message from acs websocket", "message", string(message[:]))
+		log.Debug("Got a message from websocket", "message", string(message[:]))
 		cs.handleMessage(message)
 	}
 	return err

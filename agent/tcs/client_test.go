@@ -20,145 +20,30 @@
 package tcs
 
 import (
-	"bytes"
-	"errors"
-	"io"
 	"math/rand"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"code.google.com/p/gomock/gomock"
-
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
-	mock_tcs "github.com/aws/amazon-ecs-agent/agent/tcs/mock"
-	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
-	"github.com/gorilla/websocket"
+	"github.com/aws/amazon-ecs-agent/agent/auth"
+	"github.com/aws/amazon-ecs-agent/agent/websocket/client"
+	"github.com/aws/amazon-ecs-agent/agent/websocket/client/mock/utils"
 )
 
-// byteBufferCloser provides an implementation of io.ReadCloser for
-// http.Response.Body
-type byteBufferCloser struct {
-	io.Reader
-}
-
-func TestConnect(t *testing.T) {
-	// Start test server.
-	closeWS := make(chan bool)
-	server, serverChan, requestChan, serverErr, err := startMockAcsServer(t, closeWS)
-	defer server.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		err = <-serverErr
-		t.Fatal(err)
-	}()
-	defer func() {
-		closeWS <- true
-		close(serverChan)
-	}()
-
-	// Created websocket client.
-	client := New(server.URL, nil)
-	err = client.Connect()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Send payload to the server.
-	go func() {
-		client.MakeRequest(createPublishMetricsRequest())
-	}()
-
-	// Read request channel to get the metric data published to the server.
-	request := <-requestChan
-
-	// Decode and verify the metric data.
-	_, responseType, err := wsclient.DecodeData([]byte(request), &decoder{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if responseType != "PublishMetricsRequest" {
-		t.Fatal("Unexpected responseType: ", responseType)
-	}
-}
-
-func TestWebsocketErrorsWithConnect(t *testing.T) {
-	// Start the test server.
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	defer ts.Close()
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-	wsClient := mock_tcs.NewMockWebsocketClient(mockCtrl)
-
-	// websocket.NewClient returns an error.
-	wsClient.EXPECT().NewClient(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().Return(nil, fakeHTTPResponse(), errors.New("client error"))
-	client := &clientServer{
-		statsEngine:  nil,
-		publishTimer: newTimer(publishMetricsInterval, publishMetrics),
-		url:          ts.URL,
-		ws:           wsClient,
-	}
-	client.TypeDecoder = &decoder{}
-
-	// Connect should return an error while creating the websocket client.
-	err := client.Connect()
-	if err == nil {
-		t.Error("Creating mock ws client succeeded, expected to fail")
-	}
-}
-
-func (byteBufferCloser) Close() error { return nil }
-
-func fakeHTTPResponse() *http.Response {
-	return &http.Response{
-		Body: byteBufferCloser{bytes.NewBufferString("")},
-	}
-}
-
-func startMockAcsServer(t *testing.T, closeWS <-chan bool) (*httptest.Server, chan<- string, <-chan string, <-chan error, error) {
-	serverChan := make(chan string)
-	requestsChan := make(chan string)
-	errChan := make(chan error)
-
-	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024}
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ws, err := upgrader.Upgrade(w, r, nil)
-		go func() {
-			<-closeWS
-			ws.Close()
-		}()
-		if err != nil {
-			errChan <- err
-		}
-		go func() {
-			_, msg, err := ws.ReadMessage()
-			if err != nil {
-				errChan <- err
-			} else {
-				requestsChan <- string(msg)
-			}
-		}()
-		for str := range serverChan {
-			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
-			if err != nil {
-				errChan <- err
-			}
-		}
-	})
-
-	server := httptest.NewServer(handler)
-	return server, serverChan, requestsChan, errChan, nil
-}
+const (
+	testClusterArn    = "arn:aws:ecs:us-east-1:123:cluster/default"
+	testInstanceArn   = "arn:aws:ecs:us-east-1:123:container-instance/abc"
+	testTaskArn       = "arn:aws:ecs:us-east-1:123:task/def"
+	testContainerName = "c1"
+	testUnit          = "Percent"
+)
 
 func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
-	cluster := "default"
-	ci := "ci"
-	taskArn := "t1"
-	unit := "unit"
-	containerName := "c1"
+	cluster := testClusterArn
+	ci := testInstanceArn
+	taskArn := testTaskArn
+	unit := testUnit
+	containerName := testContainerName
 	var fval float64
 	fval = rand.Float64()
 	var ival int64
@@ -197,4 +82,50 @@ func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
 		},
 		Timestamp: &ts,
 	}
+}
+
+func TestConnectPublishMetricsRequest(t *testing.T) {
+	closeWS := make(chan bool)
+	server, serverChan, requestChan, serverErr, err := mockwsutils.StartMockServer(t, closeWS)
+	defer server.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		t.Fatal(<-serverErr)
+	}()
+
+	cs := New(server.URL, "us-east-1", auth.TestCredentialProvider{}, true, nil)
+	// Wait for up to a second for the mock server to launch
+	for i := 0; i < 100; i++ {
+		err = cs.Connect()
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		_ = cs.Serve()
+	}()
+
+	go func() {
+		cs.MakeRequest(createPublishMetricsRequest())
+	}()
+
+	request := <-requestChan
+
+	// Decode and verify the metric data.
+	_, responseType, err := wsclient.DecodeData([]byte(request), &decoder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if responseType != "PublishMetricsRequest" {
+		t.Fatal("Unexpected responseType: ", responseType)
+	}
+	closeWS <- true
+	close(serverChan)
 }

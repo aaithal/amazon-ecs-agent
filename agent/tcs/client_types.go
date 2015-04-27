@@ -36,10 +36,10 @@ func init() {
 	// reflection, but that would solve this. The alternative is to either parse
 	// the .json model or the generated struct names.
 	recognizedTypes := []interface{}{
-		ecstcs.StopSessionMessage{},
+		ecstcs.StopTelemetrySessionMessage{},
 		ecstcs.AckRequest{},
 		ecstcs.PublishMetricsRequest{},
-		ecstcs.StartSessionRequest{},
+		ecstcs.StartTelemetrySessionRequest{},
 		ecstcs.ServerException{},
 	}
 

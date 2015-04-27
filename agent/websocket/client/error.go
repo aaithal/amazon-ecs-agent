@@ -21,6 +21,11 @@ type WSUnretriableErrors interface {
 	Get() []interface{}
 }
 
+// ServiceError defines methods to return new backend specific error objects.
+type ServiceError interface {
+	NewError(err interface{}) *WSError
+}
+
 // WSError wraps all the typed errors that the backend may return
 // This will not be needed once the aws-sdk-go generation handles error types
 // more cleanly

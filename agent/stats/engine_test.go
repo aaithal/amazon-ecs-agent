@@ -94,20 +94,26 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	resolver := mock_resolver.NewMockContainerMetadataResolver(mockCtrl)
-	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
-	resolver.EXPECT().ResolveTask("c2").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
-	resolver.EXPECT().ResolveTask("c3").AnyTimes().Return(&api.Task{Arn: "t2"}, nil)
+	t1 := &api.Task{Arn: "t1", Family: "f1"}
+	t2 := &api.Task{Arn: "t2", Family: "f2"}
+	t3 := &api.Task{Arn: "t3"}
+	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(t1, nil)
+	resolver.EXPECT().ResolveTask("c2").AnyTimes().Return(t1, nil)
+	resolver.EXPECT().ResolveTask("c3").AnyTimes().Return(t2, nil)
 	resolver.EXPECT().ResolveTask("c4").AnyTimes().Return(nil, errors.New("unmapped container"))
-	resolver.EXPECT().ResolveTask("c5").AnyTimes().Return(&api.Task{Arn: "t2"}, nil)
+	resolver.EXPECT().ResolveTask("c5").AnyTimes().Return(t2, nil)
+	resolver.EXPECT().ResolveTask("c6").AnyTimes().Return(t3, nil)
 
 	resolver.EXPECT().ResolveName("c1").AnyTimes().Return("n-c1", nil)
 	resolver.EXPECT().ResolveName("c2").AnyTimes().Return("n-c2", nil)
 	resolver.EXPECT().ResolveName("c3").AnyTimes().Return("n-c3", nil)
 	resolver.EXPECT().ResolveName("c4").AnyTimes().Return("", errors.New("unmapped container"))
 	resolver.EXPECT().ResolveName("c5").AnyTimes().Return("", errors.New("unmapped container"))
+	resolver.EXPECT().ResolveName("c6").AnyTimes().Return("n-c6", nil)
 
 	engine := NewDockerStatsEngine()
 	engine.resolver = resolver
+	engine.metricsMetadata = newMetricsMetadata(&defaultCluster, &defaultContainerInstance)
 
 	engine.AddContainer("c1")
 	engine.AddContainer("c1")
@@ -158,7 +164,7 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	}
 
 	if metadata == nil {
-		t.Error("Metadata is nil")
+		t.Fatal("Metadata is nil")
 	}
 	if *metadata.Cluster != defaultCluster {
 		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
@@ -224,13 +230,22 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	if err == nil {
 		t.Error("Expected non-empty error for empty stats.")
 	}
+
+	// Should get an error while adding this container due to unmapped
+	// task arn to task definition family.
+	engine.AddContainer("c6")
+	_, _, err = engine.GetInstanceMetrics()
+	if err == nil {
+		t.Error("Expected non-empty error for empty stats.")
+	}
 }
 
 func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 	resolver := mock_resolver.NewMockContainerMetadataResolver(mockCtrl)
-	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(&api.Task{Arn: "t1"}, nil)
+	t1 := &api.Task{Arn: "t1", Family: "f1"}
+	resolver.EXPECT().ResolveTask("c1").AnyTimes().Return(t1, nil)
 	resolver.EXPECT().ResolveName("c1").AnyTimes().Return("n-c1", nil)
 
 	engine := NewDockerStatsEngine()
@@ -252,7 +267,7 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 	if len(taskMetrics) != 1 {
-		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
+		t.Fatal("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
 	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
 	if err != nil {

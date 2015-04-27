@@ -24,6 +24,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/amazon-ecs-agent/agent/auth"
 	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
+	"github.com/aws/amazon-ecs-agent/agent/websocket/client/mock/utils"
 	"github.com/gorilla/websocket"
 )
 
@@ -169,44 +170,9 @@ const (
 	TestInstanceArn = "arn:aws:ec2:123:container/containerInstance/12345678"
 )
 
-func startMockAcsServer(t *testing.T, closeWS <-chan bool) (*httptest.Server, chan<- string, <-chan string, <-chan error, error) {
-	serverChan := make(chan string)
-	requestsChan := make(chan string)
-	errChan := make(chan error)
-
-	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024}
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ws, err := upgrader.Upgrade(w, r, nil)
-		go func() {
-			<-closeWS
-			ws.Close()
-		}()
-		if err != nil {
-			errChan <- err
-		}
-		go func() {
-			_, msg, err := ws.ReadMessage()
-			if err != nil {
-				errChan <- err
-			} else {
-				requestsChan <- string(msg)
-			}
-		}()
-		for str := range serverChan {
-			err := ws.WriteMessage(websocket.TextMessage, []byte(str))
-			if err != nil {
-				errChan <- err
-			}
-		}
-	})
-
-	server := httptest.NewTLSServer(handler)
-	return server, serverChan, requestsChan, errChan, nil
-}
-
 func TestConnect(t *testing.T) {
 	closeWS := make(chan bool)
-	server, serverChan, requestChan, serverErr, err := startMockAcsServer(t, closeWS)
+	server, serverChan, requestChan, serverErr, err := mockwsutils.StartMockServer(t, closeWS)
 	defer server.Close()
 	if err != nil {
 		t.Fatal(err)

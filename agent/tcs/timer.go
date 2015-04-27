@@ -43,7 +43,7 @@ func (t *timer) start(param interface{}) {
 			case <-tick:
 				err := t.invoke(param)
 				if err != nil {
-					log.Error("timer invoke", "err", err)
+					log.Debug("timer invoke", "err", err)
 				}
 			}
 		}

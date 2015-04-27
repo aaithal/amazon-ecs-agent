@@ -25,13 +25,16 @@ func (err *UnretriableErrors) Get() []interface{} {
 	return unretriableErrors
 }
 
-// NewTcsError returns an error corresponding to a typed error returned from
+// tcsError implements wsclient.ServiceError interface.
+type tcsError struct{}
+
+// NewError returns an error corresponding to a typed error returned from
 // ACS. It is expected that the passed in interface{} is really a struct which
 // has a 'Message' field of type *string. In that case, the Message will be
 // conveyed as part of the Error string as well as the type. It is safe to pass
 // anything into this constructor and it will also work reasonably well with
 // anything fulfilling the 'error' interface.
-func NewTcsError(err interface{}) *wsclient.WSError {
+func (te *tcsError) NewError(err interface{}) *wsclient.WSError {
 	return &wsclient.WSError{ErrObj: err, Type: errType, WSUnretriableErrors: &UnretriableErrors{}}
 }
 

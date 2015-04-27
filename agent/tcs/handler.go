@@ -20,11 +20,13 @@
 package tcs
 
 import (
-	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 )
@@ -38,28 +40,36 @@ var endpoint string
 // sessionWrapper encapsulates the parameters required to start a session
 // with the backend. It defines the startSession method for this purpose.
 type sessionWrapper struct {
-	url         string
-	statsEngine stats.Engine
+	acceptInvalidCert  bool
+	credentialProvider credentials.AWSCredentialProvider
+	region             string
+	statsEngine        stats.Engine
+	url                string
 }
 
 // StartSession creates a session with the backend and handles requests
 // using the passed in arguments.
 // The engine is expected to initialized and gathering container metrics by
 // the time the websocket client starts using it.
-func StartSession(statsEngine stats.Engine) error {
+func StartSession(containerInstance string, credentialProvider credentials.AWSCredentialProvider, cfg *config.Config, acceptInvalidCert bool, statsEngine stats.Engine) error {
 	backoff := utils.NewSimpleBackoff(time.Second, 1*time.Minute, 0.2, 2)
 	setEndpoint()
-	sw := &sessionWrapper{url: formatURL(endpoint), statsEngine: statsEngine}
+	sw := &sessionWrapper{
+		acceptInvalidCert:  acceptInvalidCert,
+		credentialProvider: credentialProvider,
+		region:             cfg.AWSRegion,
+		url:                formatURL(endpoint, cfg.Cluster, containerInstance),
+		statsEngine:        statsEngine,
+	}
 	return utils.RetryWithBackoff(backoff, sw.startSession)
 }
 
 // startSession creates a session with the backend.
 func (sw *sessionWrapper) startSession() error {
 	log.Info("Creating ws client", "url", sw.url)
-	client := New(sw.url, sw.statsEngine)
+	client := New(sw.url, sw.region, sw.credentialProvider, sw.acceptInvalidCert, sw.statsEngine)
 	err := client.Connect()
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
@@ -67,12 +77,15 @@ func (sw *sessionWrapper) startSession() error {
 }
 
 // formatURL returns formatted url for tcs endpoint.
-func formatURL(endpoint string) string {
-	url := endpoint
-	if !strings.HasSuffix(url, "/") {
-		url += "/"
+func formatURL(endpoint string, cluster string, containerInstance string) string {
+	tcsURL := endpoint
+	if !strings.HasSuffix(tcsURL, "/") {
+		tcsURL += "/"
 	}
-	return url + "ws"
+	query := url.Values{}
+	query.Set("cluster", cluster)
+	query.Set("containerInstance", containerInstance)
+	return tcsURL + "ws?" + query.Encode()
 }
 
 // setEndpoint sets the backend endpoint to connect to.

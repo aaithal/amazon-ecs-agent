@@ -113,25 +113,25 @@ type metadataServerException struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
-type StartSessionRequest struct {
+type StartTelemetrySessionRequest struct {
 	Cluster *string `locationName:"cluster" type:"string"`
 
 	ContainerInstance *string `locationName:"containerInstance" type:"string"`
 
-	metadataStartSessionRequest `json:"-", xml:"-"`
+	metadataStartTelemetrySessionRequest `json:"-", xml:"-"`
 }
 
-type metadataStartSessionRequest struct {
+type metadataStartTelemetrySessionRequest struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
-type StopSessionMessage struct {
+type StopTelemetrySessionMessage struct {
 	Message *string `locationName:"message" type:"string"`
 
-	metadataStopSessionMessage `json:"-", xml:"-"`
+	metadataStopTelemetrySessionMessage `json:"-", xml:"-"`
 }
 
-type metadataStopSessionMessage struct {
+type metadataStopTelemetrySessionMessage struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
@@ -139,6 +139,8 @@ type TaskMetric struct {
 	ContainerMetrics []*ContainerMetric `locationName:"containerMetrics" type:"list"`
 
 	TaskArn *string `locationName:"taskArn" type:"string"`
+
+	TaskDefinitionFamily *string `locationName:"taskDefinitionFamily" type:"string"`
 
 	metadataTaskMetric `json:"-", xml:"-"`
 }

@@ -29,14 +29,14 @@
         }
       ]
     },
-    "StartSession":{
-      "name":"StartSession",
+    "StartTelemetrySession":{
+      "name":"StartTelemetrySession",
       "http":{
         "method":"POST",
         "requestUri":"/"
       },
-      "input":{"shape":"StartSessionRequest"},
-      "output":{"shape":"StopSessionMessage"},
+      "input":{"shape":"StartTelemetrySessionRequest"},
+      "output":{"shape":"StopTelemetrySessionMessage"},
       "errors":[
         {
           "shape":"ClientException",
@@ -115,14 +115,14 @@
       },
       "exception":true
     },
-    "StartSessionRequest":{
+    "StartTelemetrySessionRequest":{
       "type":"structure",
       "members":{
         "cluster":{"shape":"String"},
         "containerInstance":{"shape":"String"}
       }
     },
-    "StopSessionMessage":{
+    "StopTelemetrySessionMessage":{
       "type":"structure",
       "members":{
         "message":{"shape":"String"}
@@ -133,6 +133,7 @@
       "type":"structure",
       "members":{
         "taskArn":{"shape":"String"},
+        "taskDefinitionFamily":{"shape":"String"},
         "containerMetrics":{"shape":"ContainerMetrics"}
       }
     },
