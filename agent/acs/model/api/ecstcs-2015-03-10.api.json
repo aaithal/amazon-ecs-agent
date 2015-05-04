@@ -10,6 +10,14 @@
     "protocol":"json"
   },
   "operations":{
+    "Heartbeat":{
+      "name":"Heartbeat",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"HeartbeatMessage"}
+    },
     "PublishMetrics":{
       "name":"PublishMetrics",
       "http":{
@@ -17,7 +25,7 @@
         "requestUri":"/"
       },
       "input":{"shape":"PublishMetricsRequest"},
-      "output":{"shape":"AckRequest"},
+      "output":{"shape":"AckPublishMetric"},
       "errors":[
         {
           "shape":"ClientException",
@@ -50,12 +58,13 @@
     }
   },
   "shapes":{
-    "AckRequest":{
+    "AckPublishMetric":{
       "type":"structure",
       "members":{
-        "messageId":{"shape":"String"}
+        "message":{"shape":"String"}
       }
     },
+    "Boolean":{"type":"boolean"},
     "CWStatsSet":{
       "type":"structure",
       "members":{
@@ -92,6 +101,12 @@
       "member":{"shape":"ContainerMetric"}
     },
     "Double":{"type":"double"},
+    "HeartbeatMessage":{
+      "type":"structure",
+      "members":{
+        "healthy":{"shape":"Boolean"}
+      }
+    },
     "Integer":{"type":"integer"},
     "MetricsMetadata":{
       "type":"structure",

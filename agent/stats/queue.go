@@ -106,8 +106,8 @@ func (queue *Queue) getCWStatsSet(f getUsageFunc) (*ecstcs.CWStatsSet, error) {
 
 	var min, max, sum float64
 	var sampleCount int64
-	min = -math.MaxFloat64
-	max = math.MaxFloat64
+	min = math.MaxFloat64
+	max = -math.MaxFloat64
 	sum = 0
 	sampleCount = 0
 

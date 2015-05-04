@@ -41,7 +41,9 @@ import (
 var log = logger.ForModule("ws client")
 
 const (
-	serviceName = "ecs"
+	// ServiceName defines the service name for the agent. This is used to sign messages
+	// that are sent to the backend.
+	ServiceName = "ecs"
 
 	// wsConnectTimeout specifies the default connection timeout to the backend.
 	wsConnectTimeout = 3 * time.Second
@@ -118,13 +120,13 @@ func (cs *ClientServerImpl) Connect() error {
 	}
 
 	log.Info("Connect: ", "url", cs.URL, "parsedURL", parsedURL)
-	signer := authv4.NewHttpSigner(cs.Region, serviceName, cs.CredentialProvider, nil)
+	signer := authv4.NewHttpSigner(cs.Region, ServiceName, cs.CredentialProvider, nil)
 
 	// NewRequest never returns an error if the url parses and we just verified
 	// it did above
 	request, _ := http.NewRequest("GET", cs.URL, nil)
 	signer.SignHttpRequest(request)
-
+	log.Info("Connect headers: ", "header", request.Header)
 	// url.Host might not have the port, but tls.Dial needs it
 	dialHost := parsedURL.Host
 	if !strings.Contains(dialHost, ":") {
@@ -184,29 +186,11 @@ func (cs *ClientServerImpl) AddRequestHandler(f RequestHandler) {
 }
 
 // MakeRequest makes a request using the given input. Note, the input *MUST* be
-// a pointer to a valid ecsacs type that this client recognises
+// a pointer to a valid backend type that this client recognises
 func (cs *ClientServerImpl) MakeRequest(input interface{}) error {
-	msg := &RequestMessage{}
-
-	recognizedTypes := cs.GetRecognizedTypes()
-	for typeStr, typeVal := range recognizedTypes {
-		if reflect.TypeOf(input) == reflect.PtrTo(typeVal) {
-			msg.Type = typeStr
-			break
-		}
-	}
-	if msg.Type == "" {
-		return &UnrecognizedWSRequestType{reflect.TypeOf(input).String()}
-	}
-	messageData, err := jsonutil.BuildJSON(input)
+	send, err := cs.CreateRequestMessage(input)
 	if err != nil {
-		return &NotMarshallableWSRequest{msg.Type, err}
-	}
-	msg.Message = json.RawMessage(messageData)
-
-	send, err := json.Marshal(msg)
-	if err != nil {
-		return &NotMarshallableWSRequest{msg.Type, err}
+		return err
 	}
 
 	// Over the wire we send something like
@@ -237,6 +221,35 @@ func (cs *ClientServerImpl) ConsumeMessages() error {
 		cs.handleMessage(message)
 	}
 	return err
+}
+
+// CreateRequestMessage creates the request json message using the given input.
+// Note, the input *MUST* be a pointer to a valid backend type that this
+// client recognises.
+func (cs *ClientServerImpl) CreateRequestMessage(input interface{}) ([]byte, error) {
+	msg := &RequestMessage{}
+
+	recognizedTypes := cs.GetRecognizedTypes()
+	for typeStr, typeVal := range recognizedTypes {
+		if reflect.TypeOf(input) == reflect.PtrTo(typeVal) {
+			msg.Type = typeStr
+			break
+		}
+	}
+	if msg.Type == "" {
+		return nil, &UnrecognizedWSRequestType{reflect.TypeOf(input).String()}
+	}
+	messageData, err := jsonutil.BuildJSON(input)
+	if err != nil {
+		return nil, &NotMarshallableWSRequest{msg.Type, err}
+	}
+	msg.Message = json.RawMessage(messageData)
+
+	send, err := json.Marshal(msg)
+	if err != nil {
+		return nil, &NotMarshallableWSRequest{msg.Type, err}
+	}
+	return send, nil
 }
 
 // handleMessage dispatches a message to the correct 'requestHandler' for its

@@ -205,5 +205,7 @@ func startMetricsSession(containerInstanceArn string, credentialProvider credent
 			log.Warn("Error starting metrics session with backend", "err", err)
 			return
 		}
+	} else {
+		log.Warn("Metric collection disabled")
 	}
 }

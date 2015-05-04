@@ -14,16 +14,20 @@
 package tcs
 
 import (
+	"bytes"
 	"errors"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
+	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4"
 	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
 	wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -60,6 +64,27 @@ type clientServer struct {
 	statsEngine  stats.Engine
 	publishTimer *timer
 	wsclient.ClientServerImpl
+	signer authv4.HttpSigner
+}
+
+// New returns a client/server to bidirectionally communicate with the backend.
+// The returned struct should have both 'Connect' and 'Serve' called upon it
+// before being used.
+func New(url string, region string, credentialProvider credentials.AWSCredentialProvider, acceptInvalidCert bool, statsEngine stats.Engine) wsclient.ClientServer {
+	cs := &clientServer{
+		statsEngine:  statsEngine,
+		publishTimer: newTimer(publishMetricsInterval, publishMetrics),
+		signer:       authv4.NewHttpSigner(region, wsclient.ServiceName, credentialProvider, nil),
+	}
+	cs.URL = url
+	cs.Region = region
+	cs.CredentialProvider = credentialProvider
+	cs.AcceptInvalidCert = acceptInvalidCert
+	cs.ServiceError = &tcsError{}
+	cs.TypeMappings = &typeMappings{}
+	cs.RequestHandlers = make(map[string]wsclient.RequestHandler)
+	cs.TypeDecoder = &decoder{}
+	return cs
 }
 
 // Serve begins serving requests using previously registered handlers (see
@@ -79,29 +104,42 @@ func (cs *clientServer) Serve() error {
 	return cs.ConsumeMessages()
 }
 
+// MakeRequest makes a request using the given input. Note, the input *MUST* be
+// a pointer to a valid backend type that this client recognises
+func (cs *clientServer) MakeRequest(input interface{}) error {
+	send, err := cs.CreateRequestMessage(input)
+	if err != nil {
+		return err
+	}
+
+	signer := authv4.NewHttpSigner(cs.Region, "ecs", cs.CredentialProvider, nil)
+	// NewRequest never returns an error if the url parses and we just verified
+	// it did above
+	reqBody := bytes.NewBuffer(send)
+	request, _ := http.NewRequest("GET", cs.URL, reqBody)
+	signer.SignHttpRequest(request)
+
+	var data []byte
+	for k, vs := range request.Header {
+		for _, v := range vs {
+			data = append(data, k...)
+			data = append(data, ": "...)
+			data = append(data, v...)
+			data = append(data, "\r\n"...)
+		}
+	}
+	data = append(data, "\r\n"...)
+	data = append(data, send...)
+	// Over the wire we send something like
+	// {"type":"AckRequest","message":{"messageId":"xyz"}}
+	// return cs.Conn.WriteMessage(websocket.TextMessage, send)
+	return cs.Conn.WriteMessage(websocket.TextMessage, data)
+}
+
 // Close closes the underlying connection.
 func (cs *clientServer) Close() error {
 	cs.publishTimer.stop()
 	return cs.Conn.Close()
-}
-
-// New returns a client/server to bidirectionally communicate with the backend.
-// The returned struct should have both 'Connect' and 'Serve' called upon it
-// before being used.
-func New(url string, region string, credentialProvider credentials.AWSCredentialProvider, acceptInvalidCert bool, statsEngine stats.Engine) wsclient.ClientServer {
-	cs := &clientServer{
-		statsEngine:  statsEngine,
-		publishTimer: newTimer(publishMetricsInterval, publishMetrics),
-	}
-	cs.URL = url
-	cs.Region = region
-	cs.CredentialProvider = credentialProvider
-	cs.AcceptInvalidCert = acceptInvalidCert
-	cs.ServiceError = &tcsError{}
-	cs.TypeMappings = &typeMappings{}
-	cs.RequestHandlers = make(map[string]wsclient.RequestHandler)
-	cs.TypeDecoder = &decoder{}
-	return cs
 }
 
 func init() {
@@ -137,6 +175,7 @@ func publishMetrics(cs interface{}) error {
 
 	timestamp := time.Now()
 
+	log.Debug("making PublishMetricsRequest", "timestamp", &timestamp)
 	return clsrv.MakeRequest(&ecstcs.PublishMetricsRequest{
 		Metadata:    metadata,
 		TaskMetrics: taskMetrics,

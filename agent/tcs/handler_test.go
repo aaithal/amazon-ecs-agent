@@ -20,7 +20,6 @@
 package tcs
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"testing"
@@ -99,12 +98,17 @@ func TestStartSession(t *testing.T) {
 	request := <-requestChan
 
 	// Decode and verify the metric data.
-	_, responseType, err := wsclient.DecodeData([]byte(request), &decoder{})
+	payload, err := getPayloadFromRequest(request)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Error decoding payload: ", err)
+	}
+
+	// Decode and verify the metric data.
+	_, responseType, err := wsclient.DecodeData([]byte(payload), &decoder{})
+	if err != nil {
+		t.Fatal("error decoding data: ", err)
 	}
 	if responseType != "PublishMetricsRequest" {
-		fmt.Println("Unexpected responseType: ", responseType)
 		t.Fatal("Unexpected responseType: ", responseType)
 	}
 }

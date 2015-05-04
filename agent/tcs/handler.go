@@ -20,11 +20,13 @@
 package tcs
 
 import (
+	"io"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/ecs_client/authv4/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
@@ -33,6 +35,9 @@ import (
 
 const (
 	endpointEnvVar = "ECS_METRICS_BACKEND_HOST"
+	// The maximum time to wait between heartbeats without disconnecting
+	heartbeatTimeout = 5 * time.Minute
+	heartbeatJitter  = 3 * time.Minute
 )
 
 var endpoint string
@@ -68,12 +73,24 @@ func StartSession(containerInstance string, credentialProvider credentials.AWSCr
 func (sw *sessionWrapper) startSession() error {
 	log.Info("Creating ws client", "url", sw.url)
 	client := New(sw.url, sw.region, sw.credentialProvider, sw.acceptInvalidCert, sw.statsEngine)
+	client.AddRequestHandler(heartbeatHandler(client))
 	err := client.Connect()
 	if err != nil {
 		return err
 	}
 
 	return client.Serve()
+}
+
+// heartbeatHandler starts a timer and listens for acs heartbeats. If there are
+// none for unexpectedly long, it closes the passed in connection.
+func heartbeatHandler(tcsConnection io.Closer) func(*ecstcs.HeartbeatMessage) {
+	timer := time.AfterFunc(utils.AddJitter(heartbeatTimeout, heartbeatJitter), func() {
+		tcsConnection.Close()
+	})
+	return func(*ecstcs.HeartbeatMessage) {
+		timer.Reset(utils.AddJitter(heartbeatTimeout, heartbeatJitter))
+	}
 }
 
 // formatURL returns formatted url for tcs endpoint.

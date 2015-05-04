@@ -15,13 +15,13 @@ package ecstcs
 
 import "time"
 
-type AckRequest struct {
-	MessageId *string `locationName:"messageId" type:"string"`
+type AckPublishMetric struct {
+	Message *string `locationName:"message" type:"string"`
 
-	metadataAckRequest `json:"-", xml:"-"`
+	metadataAckPublishMetric `json:"-", xml:"-"`
 }
 
-type metadataAckRequest struct {
+type metadataAckPublishMetric struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
@@ -74,6 +74,24 @@ type ContainerMetric struct {
 }
 
 type metadataContainerMetric struct {
+	SDKShapeTraits bool `type:"structure"`
+}
+
+type HeartbeatMessage struct {
+	Healthy *bool `locationName:"healthy" type:"boolean"`
+
+	metadataHeartbeatMessage `json:"-", xml:"-"`
+}
+
+type metadataHeartbeatMessage struct {
+	SDKShapeTraits bool `type:"structure"`
+}
+
+type HeartbeatOutput struct {
+	metadataHeartbeatOutput `json:"-", xml:"-"`
+}
+
+type metadataHeartbeatOutput struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 

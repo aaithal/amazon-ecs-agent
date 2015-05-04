@@ -20,7 +20,9 @@
 package tcs
 
 import (
+	"errors"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,60 +30,47 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/auth"
 	"github.com/aws/amazon-ecs-agent/agent/websocket/client"
 	"github.com/aws/amazon-ecs-agent/agent/websocket/client/mock/utils"
+	"github.com/gorilla/websocket"
 )
 
 const (
-	testClusterArn    = "arn:aws:ecs:us-east-1:123:cluster/default"
-	testInstanceArn   = "arn:aws:ecs:us-east-1:123:container-instance/abc"
-	testTaskArn       = "arn:aws:ecs:us-east-1:123:task/def"
-	testContainerName = "c1"
-	testUnit          = "Percent"
+	testClusterArn           = "arn:aws:ecs:us-east-1:123:cluster/default"
+	testInstanceArn          = "arn:aws:ecs:us-east-1:123:container-instance/abc"
+	testTaskArn              = "arn:aws:ecs:us-east-1:123:task/def"
+	testTaskDefinitionFamily = "task-def"
+	testContainerName        = "c1"
+	testUnit                 = "Percent"
 )
 
-func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
-	cluster := testClusterArn
-	ci := testInstanceArn
-	taskArn := testTaskArn
-	unit := testUnit
-	containerName := testContainerName
-	var fval float64
-	fval = rand.Float64()
-	var ival int64
-	ival = rand.Int63n(10)
-	ts := time.Now()
-	return &ecstcs.PublishMetricsRequest{
-		Metadata: &ecstcs.MetricsMetadata{
-			Cluster:           &cluster,
-			ContainerInstance: &ci,
-		},
-		TaskMetrics: []*ecstcs.TaskMetric{
-			&ecstcs.TaskMetric{
-				ContainerMetrics: []*ecstcs.ContainerMetric{
-					&ecstcs.ContainerMetric{
-						CpuStatsSet: &ecstcs.CWStatsSet{
-							Max:         &fval,
-							Min:         &fval,
-							SampleCount: &ival,
-							Sum:         &fval,
-							Unit:        &unit,
-						},
-						MemoryStatsSet: &ecstcs.CWStatsSet{
-							Max:         &fval,
-							Min:         &fval,
-							SampleCount: &ival,
-							Sum:         &fval,
-							Unit:        &unit,
-						},
-						Metadata: &ecstcs.ContainerMetadata{
-							Name: &containerName,
-						},
-					},
-				},
-				TaskArn: &taskArn,
-			},
-		},
-		Timestamp: &ts,
+type messageLogger struct {
+	writes [][]byte
+	reads  [][]byte
+	closed bool
+}
+
+func (ml *messageLogger) WriteMessage(_ int, data []byte) error {
+	if ml.closed {
+		return errors.New("can't write to closed ws")
 	}
+	ml.writes = append(ml.writes, data)
+	return nil
+}
+
+func (ml *messageLogger) Close() error {
+	ml.closed = true
+	return nil
+}
+
+func (ml *messageLogger) ReadMessage() (int, []byte, error) {
+	for len(ml.reads) == 0 && !ml.closed {
+		time.Sleep(1 * time.Millisecond)
+	}
+	if ml.closed {
+		return 0, []byte{}, errors.New("can't read from a closed websocket")
+	}
+	read := ml.reads[len(ml.reads)-1]
+	ml.reads = ml.reads[0 : len(ml.reads)-1]
+	return websocket.TextMessage, read, nil
 }
 
 func TestConnectPublishMetricsRequest(t *testing.T) {
@@ -119,13 +108,93 @@ func TestConnectPublishMetricsRequest(t *testing.T) {
 	request := <-requestChan
 
 	// Decode and verify the metric data.
-	_, responseType, err := wsclient.DecodeData([]byte(request), &decoder{})
+	payload, err := getPayloadFromRequest(request)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Error decoding payload: ", err)
+	}
+
+	_, responseType, err := wsclient.DecodeData([]byte(payload), &decoder{})
+	if err != nil {
+		t.Fatal("error decoding data: ", err)
 	}
 	if responseType != "PublishMetricsRequest" {
 		t.Fatal("Unexpected responseType: ", responseType)
 	}
 	closeWS <- true
 	close(serverChan)
+}
+
+func TestPublishMetricsRequest(t *testing.T) {
+	cs, _ := testCS()
+	err := cs.MakeRequest(createPublishMetricsRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//cs.Close()
+}
+
+func createPublishMetricsRequest() *ecstcs.PublishMetricsRequest {
+	cluster := testClusterArn
+	ci := testInstanceArn
+	taskArn := testTaskArn
+	taskDefinitionFamily := testTaskDefinitionFamily
+	unit := testUnit
+	containerName := testContainerName
+	var fval float64
+	fval = rand.Float64()
+	var ival int64
+	ival = rand.Int63n(10)
+	ts := time.Now()
+	return &ecstcs.PublishMetricsRequest{
+		Metadata: &ecstcs.MetricsMetadata{
+			Cluster:           &cluster,
+			ContainerInstance: &ci,
+		},
+		TaskMetrics: []*ecstcs.TaskMetric{
+			&ecstcs.TaskMetric{
+				ContainerMetrics: []*ecstcs.ContainerMetric{
+					&ecstcs.ContainerMetric{
+						CpuStatsSet: &ecstcs.CWStatsSet{
+							Max:         &fval,
+							Min:         &fval,
+							SampleCount: &ival,
+							Sum:         &fval,
+							Unit:        &unit,
+						},
+						MemoryStatsSet: &ecstcs.CWStatsSet{
+							Max:         &fval,
+							Min:         &fval,
+							SampleCount: &ival,
+							Sum:         &fval,
+							Unit:        &unit,
+						},
+						Metadata: &ecstcs.ContainerMetadata{
+							Name: &containerName,
+						},
+					},
+				},
+				TaskArn:              &taskArn,
+				TaskDefinitionFamily: &taskDefinitionFamily,
+			},
+		},
+		Timestamp: &ts,
+	}
+}
+
+func testCS() (wsclient.ClientServer, *messageLogger) {
+	testCreds := auth.TestCredentialProvider{}
+	cs := New("localhost:443", "us-east-1", testCreds, true, nil).(*clientServer)
+	ml := &messageLogger{make([][]byte, 0), make([][]byte, 0), false}
+	cs.Conn = ml
+	return cs, ml
+}
+
+func getPayloadFromRequest(request string) (string, error) {
+	lines := strings.Split(request, "\r\n")
+	if len(lines) > 0 {
+		return lines[len(lines)-1], nil
+	}
+
+	return "", errors.New("Could not get payload")
 }
