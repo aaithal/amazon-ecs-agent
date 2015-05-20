@@ -90,6 +90,28 @@ func validateContainerMetrics(containerMetrics []*ecstcs.ContainerMetric, expect
 	return nil
 }
 
+func validateIdleContainerMetrics(engine *DockerStatsEngine, t *testing.T) {
+	metadata, taskMetrics, err := engine.GetInstanceMetrics()
+	if err != nil {
+		t.Fatal("Error getting stats from idle engine: ", err)
+	}
+	if metadata == nil {
+		t.Fatal("Metadata is nil")
+	}
+	if *metadata.Cluster != defaultCluster {
+		t.Error("Expected cluster in metadata to be: ", defaultCluster, " got: ", *metadata.Cluster)
+	}
+	if *metadata.ContainerInstance != defaultContainerInstance {
+		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
+	}
+	if !*metadata.Idle {
+		t.Error("Expected metadata idle to be true")
+	}
+	if len(taskMetrics) != 0 {
+		t.Error("Expected emptty task metrics, got a list of length: ", len(taskMetrics))
+	}
+}
+
 func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
@@ -218,26 +240,17 @@ func TestStatsEngineAddRemoveContainers(t *testing.T) {
 	// Should get an error while adding this container due to unmapped
 	// container to task.
 	engine.AddContainer("c4")
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 
 	// Should get an error while adding this container due to unmapped
 	// container to name.
 	engine.AddContainer("c5")
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 
 	// Should get an error while adding this container due to unmapped
 	// task arn to task definition family.
 	engine.AddContainer("c6")
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineMetadataInStatsSets(t *testing.T) {
@@ -284,10 +297,7 @@ func TestStatsEngineMetadataInStatsSets(t *testing.T) {
 	}
 
 	engine.RemoveContainer("c1")
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineInvalidTaskEngine(t *testing.T) {
@@ -302,11 +312,10 @@ func TestStatsEngineInvalidTaskEngine(t *testing.T) {
 func TestStatsEngineUninitialized(t *testing.T) {
 	engine := NewDockerStatsEngine()
 	engine.resolver = &DockerContainerMetadataResolver{}
+	engine.metricsMetadata = newMetricsMetadata(&defaultCluster, &defaultContainerInstance)
 	engine.AddContainer("c1")
-	_, _, err := engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	engine.metricsMetadata = newMetricsMetadata(&defaultCluster, &defaultContainerInstance)
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineTerminalTask(t *testing.T) {
@@ -318,10 +327,7 @@ func TestStatsEngineTerminalTask(t *testing.T) {
 	engine.resolver = resolver
 
 	engine.AddContainer("c1")
-	_, _, err := engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineClientErrorListingContainers(t *testing.T) {

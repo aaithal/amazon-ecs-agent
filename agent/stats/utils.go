@@ -15,10 +15,15 @@ package stats
 
 import (
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/docker/libcontainer"
 )
+
+// networkStatsErrorPattern defines the pattern that is used to evaluate
+// if there's an error reading network stats.
+const networkStatsErrorPattern = "open /sys/class/net/veth.*: no such file or directory"
 
 // NaN32 returns a 32bit NaN.
 func NaN32() float32 {
@@ -47,4 +52,16 @@ func CreateContainerStats(cpuTime uint64, memBytes uint64, ts time.Time) *Contai
 func ParseNanoTime(value string) time.Time {
 	ts, _ := time.Parse(time.RFC3339Nano, value)
 	return ts
+}
+
+// isNetworkStatsError returns if the error indicates that files in /sys/class/net
+// could not be opened.
+func isNetworkStatsError(err error) bool {
+	matched, mErr := regexp.MatchString(networkStatsErrorPattern, err.Error())
+	if mErr != nil {
+		log.Debug("Error matching string", "err", mErr)
+		return false
+	}
+
+	return matched
 }

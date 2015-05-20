@@ -28,7 +28,15 @@
       "output":{"shape":"AckPublishMetric"},
       "errors":[
         {
-          "shape":"ClientException",
+          "shape":"BadRequestException",
+          "exception":true
+        },
+        {
+          "shape":"ResourceValidationException",
+          "exception":true
+        },
+        {
+          "shape":"InvalidParameterException",
           "exception":true
         },
         {
@@ -47,7 +55,11 @@
       "output":{"shape":"StopTelemetrySessionMessage"},
       "errors":[
         {
-          "shape":"ClientException",
+          "shape":"BadRequestException",
+          "exception":true
+        },
+        {
+          "shape":"ResourceValidationException",
           "exception":true
         },
         {
@@ -64,6 +76,13 @@
         "message":{"shape":"String"}
       }
     },
+    "BadRequestException":{
+      "type":"structure",
+      "members":{
+        "message":{"shape":"String"}
+      },
+      "exception":true
+    },
     "Boolean":{"type":"boolean"},
     "CWStatsSet":{
       "type":"structure",
@@ -74,13 +93,6 @@
         "sum":{"shape":"Double"},
         "unit":{"shape":"String"}
       }
-    },
-    "ClientException":{
-      "type":"structure",
-      "members":{
-        "message":{"shape":"String"}
-      },
-      "exception":true
     },
     "ContainerMetadata":{
       "type":"structure",
@@ -108,11 +120,19 @@
       }
     },
     "Integer":{"type":"integer"},
+    "InvalidParameterException":{
+      "type":"structure",
+      "members":{
+        "message":{"shape":"String"}
+      },
+      "exception":true
+    },
     "MetricsMetadata":{
       "type":"structure",
       "members":{
         "cluster":{"shape":"String"},
-        "containerInstance":{"shape":"String"}
+        "containerInstance":{"shape":"String"},
+        "idle":{"shape":"Boolean"}
       }
     },
     "PublishMetricsRequest":{
@@ -122,6 +142,13 @@
         "taskMetrics":{"shape":"TaskMetrics"},
         "timestamp":{"shape":"Timestamp"}
       }
+    },
+    "ResourceValidationException":{
+      "type":"structure",
+      "members":{
+        "message":{"shape":"String"}
+      },
+      "exception":true
     },
     "ServerException":{
       "type":"structure",
@@ -149,6 +176,7 @@
       "members":{
         "taskArn":{"shape":"String"},
         "taskDefinitionFamily":{"shape":"String"},
+        "taskDefinitionVersion":{"shape":"String"},
         "containerMetrics":{"shape":"ContainerMetrics"}
       }
     },

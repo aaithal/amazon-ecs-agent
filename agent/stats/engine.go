@@ -65,8 +65,8 @@ type DockerStatsEngine struct {
 	resolver            resolver.ContainerMetadataResolver
 	// tasksToContainers maps task arns to a map of container ids to CronContainer objects.
 	tasksToContainers map[string]map[string]*CronContainer
-	// tasksToDefinitions maps task arns to task definiton names
-	tasksToDefinitions map[string]string
+	// tasksToDefinitions maps task arns to task definiton name and family metadata objects.
+	tasksToDefinitions map[string]*taskDefinition
 }
 
 // dockerStatsEngine is a singleton object of DockerStatsEngine.
@@ -119,7 +119,7 @@ func NewDockerStatsEngine() *DockerStatsEngine {
 			client:             nil,
 			resolver:           nil,
 			tasksToContainers:  make(map[string]map[string]*CronContainer),
-			tasksToDefinitions: make(map[string]string),
+			tasksToDefinitions: make(map[string]*taskDefinition),
 		}
 	}
 
@@ -185,7 +185,7 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 	// is not terminal.
 	task, err := engine.resolver.ResolveTask(dockerID)
 	if err != nil {
-		log.Warn("Could not map container to task, ignoring", "err", err, "id", dockerID)
+		log.Debug("Could not map container to task, ignoring", "err", err, "id", dockerID)
 		return
 	}
 
@@ -195,25 +195,20 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 	}
 
 	if task.KnownStatus.Terminal() {
-		log.Info("Task is terminal, ignoring", "id", dockerID)
+		log.Debug("Task is terminal, ignoring", "id", dockerID)
 		return
 	}
 
-	// Check if this containers is already being watched.
+	// Check if this container is already being watched.
 	_, taskExists := engine.tasksToContainers[task.Arn]
 	if taskExists {
 		// task arn exists in map.
 		_, containerExists := engine.tasksToContainers[task.Arn][dockerID]
 		if containerExists {
 			// container arn exists in map.
-			log.Info("Container already being watched, ignoring", "id", dockerID)
+			log.Debug("Container already being watched, ignoring", "id", dockerID)
 			return
 		}
-	}
-
-	if !taskExists {
-		// Create a map for the task arn if it doesn't exist yet.
-		engine.tasksToContainers[task.Arn] = make(map[string]*CronContainer)
 	}
 
 	containerName, err := engine.resolver.ResolveName(dockerID)
@@ -221,10 +216,16 @@ func (engine *DockerStatsEngine) AddContainer(dockerID string) {
 		log.Info("Could not get name for container, ignoring", "err", err, "id", dockerID)
 		return
 	}
+
+	if !taskExists {
+		// Create a map for the task arn if it doesn't exist yet.
+		engine.tasksToContainers[task.Arn] = make(map[string]*CronContainer)
+	}
+
 	log.Debug("Adding container to stats watch list", "id", dockerID, "task", task.Arn)
 	container := newCronContainer(&dockerID, &containerName)
 	engine.tasksToContainers[task.Arn][dockerID] = container
-	engine.tasksToDefinitions[task.Arn] = task.Family
+	engine.tasksToDefinitions[task.Arn] = &taskDefinition{family: task.Family, version: task.Version}
 	container.StartStatsCron()
 }
 
@@ -237,7 +238,7 @@ func (engine *DockerStatsEngine) RemoveContainer(dockerID string) {
 	// Make sure that this container belongs to a task.
 	task, err := engine.resolver.ResolveTask(dockerID)
 	if err != nil {
-		log.Info("Could not map container to task, ignoring", "err", err, "id", dockerID)
+		log.Warn("Could not map container to task, ignoring", "err", err, "id", dockerID)
 		return
 	}
 
@@ -272,6 +273,13 @@ func (engine *DockerStatsEngine) RemoveContainer(dockerID string) {
 // GetInstanceMetrics gets all task metrics and instance metadata from stats engine.
 func (engine *DockerStatsEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, []*ecstcs.TaskMetric, error) {
 	var taskMetrics []*ecstcs.TaskMetric
+	idle := engine.isIdle()
+	engine.metricsMetadata.Idle = &idle
+	if idle {
+		log.Debug("Instance is idle. No task metrics to report")
+		return engine.metricsMetadata, taskMetrics, nil
+	}
+
 	for taskArn := range engine.tasksToContainers {
 		containerMetrics, err := engine.getContainerMetricsForTask(taskArn)
 		if err != nil {
@@ -284,24 +292,30 @@ func (engine *DockerStatsEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, 
 			continue
 		}
 
-		taskDefinitionFamily, exists := engine.tasksToDefinitions[taskArn]
+		taskDef, exists := engine.tasksToDefinitions[taskArn]
 		if !exists {
 			log.Warn("Could not map task to definition", "task", taskArn)
 			continue
 		}
 
 		taskMetrics = append(taskMetrics, &ecstcs.TaskMetric{
-			TaskArn:              &taskArn,
-			TaskDefinitionFamily: &taskDefinitionFamily,
-			ContainerMetrics:     containerMetrics,
+			TaskArn:               &taskArn,
+			TaskDefinitionFamily:  &taskDef.family,
+			TaskDefinitionVersion: &taskDef.version,
+			ContainerMetrics:      containerMetrics,
 		})
 	}
 
 	if len(taskMetrics) == 0 {
-		return nil, nil, errors.New("No tasks to report")
+		// Not idle. Expect taskMetrics to be there.
+		return nil, nil, errors.New("No task metrics to report")
 	}
 
 	return engine.metricsMetadata, taskMetrics, nil
+}
+
+func (engine *DockerStatsEngine) isIdle() bool {
+	return len(engine.tasksToContainers) == 0
 }
 
 // initDockerClient initializes engine's docker client.

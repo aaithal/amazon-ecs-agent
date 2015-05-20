@@ -26,14 +26,21 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 )
 
-const testImageName = "amazon/amazon-ecs-gremlin:make"
+const (
+	testImageName = "amazon/amazon-ecs-gremlin:make"
 
-// defaultDockerTimeoutSeconds is the timeout for dialing the docker remote API.
-const defaultDockerTimeoutSeconds uint = 10
+	// defaultDockerTimeoutSeconds is the timeout for dialing the docker remote API.
+	defaultDockerTimeoutSeconds uint = 10
 
-// waitForCleanupSleep is the sleep duration in milliseconds
-// for the waiting after container cleanup before checking the state of the manager.
-const waitForCleanupSleep = 1 * time.Millisecond
+	// waitForCleanupSleep is the sleep duration in milliseconds
+	// for the waiting after container cleanup before checking the state of the manager.
+	waitForCleanupSleep = 1 * time.Millisecond
+
+	taskArn               = "gremlin"
+	taskDefinitionFamily  = "docker-gremlin"
+	taskDefinitionVersion = "1"
+	containerName         = "gremlin-container"
+)
 
 var endpoint = utils.DefaultIfBlank(os.Getenv(engine.DOCKER_ENDPOINT_ENV_VARIABLE), engine.DOCKER_DEFAULT_ENDPOINT)
 
@@ -82,9 +89,10 @@ func (resolver *IntegContainerMetadataResolver) ResolveName(dockerID string) (st
 
 	return name, nil
 }
-func (resolver *IntegContainerMetadataResolver) addToMap(containerID string, taskArn string, family string, name string) {
-	resolver.containerIDToTask[containerID] = &api.Task{Arn: taskArn, Family: family}
-	resolver.containerIDToName[containerID] = name
+
+func (resolver *IntegContainerMetadataResolver) addToMap(containerID string) {
+	resolver.containerIDToTask[containerID] = &api.Task{Arn: taskArn, Family: taskDefinitionFamily, Version: taskDefinitionVersion}
+	resolver.containerIDToName[containerID] = containerName
 }
 
 func TestStatsEngineWithExistingContainers(t *testing.T) {
@@ -109,7 +117,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin", "docker-gremlin", "gremlin")
+	resolver.addToMap(container.ID)
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)
@@ -151,7 +159,15 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	if len(taskMetrics) != 1 {
 		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
 	}
-	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
+
+	taskMetric := taskMetrics[0]
+	if *taskMetric.TaskDefinitionFamily != taskDefinitionFamily {
+		t.Error("Excpected task definition family to be: ", taskDefinitionFamily, " got: ", *taskMetric.TaskDefinitionFamily)
+	}
+	if *taskMetric.TaskDefinitionVersion != taskDefinitionVersion {
+		t.Error("Excpected task definition family to be: ", taskDefinitionVersion, " got: ", *taskMetric.TaskDefinitionVersion)
+	}
+	err = validateContainerMetrics(taskMetric.ContainerMetrics, 1)
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
 	}
@@ -164,10 +180,7 @@ func TestStatsEngineWithExistingContainers(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineWithNewContainers(t *testing.T) {
@@ -191,7 +204,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	resolver := newIntegContainerMetadataResolver()
 	// Initialize mock interface so that task id is resolved only for the container
 	// that was launched during the test.
-	resolver.addToMap(container.ID, "gremlin", "docker-gremlin", "gremlin")
+	resolver.addToMap(container.ID)
 
 	// Wait for containers from previous tests to transition states.
 	time.Sleep(checkPointSleep)
@@ -216,9 +229,6 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 		t.Error("Error gettting instance metrics: ", err)
 	}
 
-	if len(taskMetrics) != 1 {
-		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
-	}
 	if metadata == nil {
 		t.Fatal("Metadata is nil")
 	}
@@ -229,7 +239,18 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 		t.Error("Expected container instance in metadata to be: ", defaultContainerInstance, " got: ", *metadata.ContainerInstance)
 	}
 
-	err = validateContainerMetrics(taskMetrics[0].ContainerMetrics, 1)
+	if len(taskMetrics) != 1 {
+		t.Error("Incorrect number of tasks. Expected: 1, got: ", len(taskMetrics))
+	}
+	taskMetric := taskMetrics[0]
+	if *taskMetric.TaskDefinitionFamily != taskDefinitionFamily {
+		t.Error("Excpected task definition family to be: ", taskDefinitionFamily, " got: ", *taskMetric.TaskDefinitionFamily)
+	}
+	if *taskMetric.TaskDefinitionVersion != taskDefinitionVersion {
+		t.Error("Excpected task definition family to be: ", taskDefinitionVersion, " got: ", *taskMetric.TaskDefinitionVersion)
+	}
+
+	err = validateContainerMetrics(taskMetric.ContainerMetrics, 1)
 	if err != nil {
 		t.Error("Error validating container metrics: ", err)
 	}
@@ -242,10 +263,7 @@ func TestStatsEngineWithNewContainers(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, _, err = engine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(engine, t)
 }
 
 func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
@@ -344,8 +362,5 @@ func TestStatsEngineWithDockerTaskEngine(t *testing.T) {
 	time.Sleep(waitForCleanupSleep)
 
 	// Should not contain any metrics after cleanup.
-	_, _, err = statsEngine.GetInstanceMetrics()
-	if err == nil {
-		t.Error("Expected non-empty error for empty stats.")
-	}
+	validateIdleContainerMetrics(statsEngine, t)
 }

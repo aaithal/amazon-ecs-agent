@@ -42,6 +42,9 @@ func init() {
 		ecstcs.PublishMetricsRequest{},
 		ecstcs.StartTelemetrySessionRequest{},
 		ecstcs.ServerException{},
+		ecstcs.BadRequestException{},
+		ecstcs.ResourceValidationException{},
+		ecstcs.InvalidParameterException{},
 	}
 
 	tcsTypeMappings = make(map[string]reflect.Type)

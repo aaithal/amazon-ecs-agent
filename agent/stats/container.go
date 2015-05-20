@@ -118,7 +118,8 @@ func (collector *LibcontainerStatsCollector) getContainerStats(container *CronCo
 		return nil, err
 	}
 	containerStats, err := libcontainer.GetStats(nil, state)
-	if err != nil {
+	if err != nil && !isNetworkStatsError(err) {
+		log.Error("Error getting libcontainer stats", "err", err)
 		return nil, err
 	}
 

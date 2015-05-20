@@ -49,3 +49,9 @@ type CronContainer struct {
 	statsQueue        *Queue
 	statsCollector    ContainerStatsCollector
 }
+
+// taskDefinition encapsulates family and version strings for a task definition
+type taskDefinition struct {
+	family  string
+	version string
+}

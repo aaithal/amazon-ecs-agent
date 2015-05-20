@@ -25,6 +25,16 @@ type metadataAckPublishMetric struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
+type BadRequestException struct {
+	Message *string `locationName:"message" type:"string"`
+
+	metadataBadRequestException `json:"-", xml:"-"`
+}
+
+type metadataBadRequestException struct {
+	SDKShapeTraits bool `type:"structure"`
+}
+
 type CWStatsSet struct {
 	Max *float64 `locationName:"max" type:"double"`
 
@@ -40,16 +50,6 @@ type CWStatsSet struct {
 }
 
 type metadataCWStatsSet struct {
-	SDKShapeTraits bool `type:"structure"`
-}
-
-type ClientException struct {
-	Message *string `locationName:"message" type:"string"`
-
-	metadataClientException `json:"-", xml:"-"`
-}
-
-type metadataClientException struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
@@ -95,10 +95,22 @@ type metadataHeartbeatOutput struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
+type InvalidParameterException struct {
+	Message *string `locationName:"message" type:"string"`
+
+	metadataInvalidParameterException `json:"-", xml:"-"`
+}
+
+type metadataInvalidParameterException struct {
+	SDKShapeTraits bool `type:"structure"`
+}
+
 type MetricsMetadata struct {
 	Cluster *string `locationName:"cluster" type:"string"`
 
 	ContainerInstance *string `locationName:"containerInstance" type:"string"`
+
+	Idle *bool `locationName:"idle" type:"boolean"`
 
 	metadataMetricsMetadata `json:"-", xml:"-"`
 }
@@ -118,6 +130,16 @@ type PublishMetricsRequest struct {
 }
 
 type metadataPublishMetricsRequest struct {
+	SDKShapeTraits bool `type:"structure"`
+}
+
+type ResourceValidationException struct {
+	Message *string `locationName:"message" type:"string"`
+
+	metadataResourceValidationException `json:"-", xml:"-"`
+}
+
+type metadataResourceValidationException struct {
 	SDKShapeTraits bool `type:"structure"`
 }
 
@@ -159,6 +181,8 @@ type TaskMetric struct {
 	TaskArn *string `locationName:"taskArn" type:"string"`
 
 	TaskDefinitionFamily *string `locationName:"taskDefinitionFamily" type:"string"`
+
+	TaskDefinitionVersion *string `locationName:"taskDefinitionVersion" type:"string"`
 
 	metadataTaskMetric `json:"-", xml:"-"`
 }

@@ -17,7 +17,7 @@ import wsclient "github.com/aws/amazon-ecs-agent/agent/websocket/client"
 
 const errType = "TCSError"
 
-// UnretriableErrors wraps all the typed errors that ACS may return
+// UnretriableErrors wraps all the typed errors that TCS may return
 type UnretriableErrors struct{}
 
 // Get gets the list of unretriable error types.
