@@ -23,6 +23,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	mock_infologger "github.com/aws/amazon-ecs-agent/agent/logger/audit/mocks"
+	"github.com/aws/amazon-ecs-agent/agent/logger/audit/request"
 	"github.com/golang/mock/gomock"
 )
 
@@ -35,8 +36,9 @@ const (
 	dummyUrlPath              = "/urlPath"
 	dummyUserAgent            = "userAgent"
 	dummyResponseCode         = 400
+	taskArn                   = "task-arn-1"
 
-	commonAuditLogEntryFieldCount = 5
+	commonAuditLogEntryFieldCount = 6
 	getCredentialsEntryFieldCount = 4
 )
 
@@ -80,17 +82,7 @@ func TestWritingToAuditLog(t *testing.T) {
 		verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
 	})
 
-	auditLogger.Log(req, dummyResponseCode, GetCredentialsEventType())
-}
-
-func verifyAuditLogEntryResult(logLine string, t *testing.T) {
-	tokens := strings.Split(logLine, " ")
-	if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
-		t.Fatalf("Incorrect number of tokens in audit log entry. Expected %d.",
-			commonAuditLogEntryFieldCount+getCredentialsEntryFieldCount)
-	}
-	verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), t)
-	verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
+	auditLogger.Log(request.LogRequest{Request: req, Arn: taskArn}, dummyResponseCode, GetCredentialsEventType())
 }
 
 func TestWritingToAuditLogWhenDisabled(t *testing.T) {
@@ -119,7 +111,7 @@ func TestWritingToAuditLogWhenDisabled(t *testing.T) {
 
 	mockInfoLogger.EXPECT().Info(gomock.Any()).Times(0)
 
-	auditLogger.Log(req, dummyResponseCode, GetCredentialsEventType())
+	auditLogger.Log(request.LogRequest{Request: req, Arn: taskArn}, dummyResponseCode, GetCredentialsEventType())
 }
 
 func TestConstructCommonAuditLogEntryFields(t *testing.T) {
@@ -132,7 +124,7 @@ func TestConstructCommonAuditLogEntryFields(t *testing.T) {
 	req.URL = parsedUrl
 	req.Header.Set("User-Agent", dummyUserAgent)
 
-	result := constructCommonAuditLogEntryFields(req, dummyResponseCode)
+	result := constructCommonAuditLogEntryFields(request.LogRequest{Request: req, Arn: taskArn}, dummyResponseCode)
 
 	verifyCommonAuditLogEntryFieldResult(result, t)
 }
@@ -167,6 +159,20 @@ func verifyCommonAuditLogEntryFieldResult(result string, t *testing.T) {
 	if tokens[4] != fmt.Sprintf(`"%s"`, dummyUserAgent) {
 		t.Fatal("user agent does not match")
 	}
+
+	if tokens[5] != taskArn {
+		t.Fatal("arn for credentials does not match")
+	}
+}
+
+func verifyAuditLogEntryResult(logLine string, t *testing.T) {
+	tokens := strings.Split(logLine, " ")
+	if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
+		t.Fatalf("Incorrect number of tokens in audit log entry. Expected %d.",
+			commonAuditLogEntryFieldCount+getCredentialsEntryFieldCount)
+	}
+	verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), t)
+	verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
 }
 
 func verifyConstructAuditLogEntryGetCredentialsResult(result string, t *testing.T) {

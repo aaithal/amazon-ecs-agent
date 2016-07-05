@@ -11,16 +11,11 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package audit
+package request
 
-import "github.com/aws/amazon-ecs-agent/agent/logger/audit/request"
+import "net/http"
 
-type AuditLogger interface {
-	Log(r request.LogRequest, httpResponseCode int, eventType string)
-	GetContainerInstanceArn() string
-	GetCluster() string
-}
-
-type InfoLogger interface {
-	Info(i ...interface{})
+type LogRequest struct {
+	Request *http.Request
+	Arn     string
 }
