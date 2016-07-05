@@ -77,12 +77,55 @@ func TestWritingToAuditLog(t *testing.T) {
 		if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
 
 		}
-		verifyAuditLogEntryResult(logLine, t)
-		verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), t)
+		verifyAuditLogEntryResult(logLine, taskArn, t)
+		verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), taskArn, t)
 		verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
 	})
 
 	auditLogger.Log(request.LogRequest{Request: req, Arn: taskArn}, dummyResponseCode, GetCredentialsEventType())
+}
+
+func TestWritingErrorsToAuditLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockInfoLogger := mock_infologger.NewMockInfoLogger(ctrl)
+
+	req, _ := http.NewRequest("GET", "foo", nil)
+	req.RemoteAddr = dummyRemoteAddress
+	parsedUrl, err := url.Parse(dummyUrl)
+	if err != nil {
+		t.Fatal("error parsing dummyUrl")
+	}
+	req.URL = parsedUrl
+	req.Header.Set("User-Agent", dummyUserAgent)
+
+	cfg := &config.Config{
+		Cluster:                 dummyCluster,
+		CredentialsAuditLogFile: "foo.txt",
+	}
+
+	auditLogger := NewAuditLog(dummyContainerInstanceArn, cfg, mockInfoLogger)
+
+	if auditLogger.GetCluster() != dummyCluster {
+		t.Fatal("Cluster is not initialized properly")
+	}
+
+	if auditLogger.GetContainerInstanceArn() != dummyContainerInstanceArn {
+		t.Fatal("ContainerInstanceArn is not initialized properly")
+	}
+
+	mockInfoLogger.EXPECT().Info(gomock.Any()).Do(func(logLine string) {
+		tokens := strings.Split(logLine, " ")
+		if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
+
+		}
+		verifyAuditLogEntryResult(logLine, "-", t)
+		verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), "-", t)
+		verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
+	})
+
+	auditLogger.Log(request.LogRequest{Request: req, Arn: ""}, dummyResponseCode, GetCredentialsEventType())
 }
 
 func TestWritingToAuditLogWhenDisabled(t *testing.T) {
@@ -126,7 +169,7 @@ func TestConstructCommonAuditLogEntryFields(t *testing.T) {
 
 	result := constructCommonAuditLogEntryFields(request.LogRequest{Request: req, Arn: taskArn}, dummyResponseCode)
 
-	verifyCommonAuditLogEntryFieldResult(result, t)
+	verifyCommonAuditLogEntryFieldResult(result, taskArn, t)
 }
 
 func TestConstructAuditLogEntryByTypeGetCredentials(t *testing.T) {
@@ -135,7 +178,17 @@ func TestConstructAuditLogEntryByTypeGetCredentials(t *testing.T) {
 	verifyConstructAuditLogEntryGetCredentialsResult(result, t)
 }
 
-func verifyCommonAuditLogEntryFieldResult(result string, t *testing.T) {
+func verifyAuditLogEntryResult(logLine string, expectedTaskArn string, t *testing.T) {
+	tokens := strings.Split(logLine, " ")
+	if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
+		t.Fatalf("Incorrect number of tokens in audit log entry. Expected %d.",
+			commonAuditLogEntryFieldCount+getCredentialsEntryFieldCount)
+	}
+	verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), expectedTaskArn, t)
+	verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
+}
+
+func verifyCommonAuditLogEntryFieldResult(result string, expectedTaskArn string, t *testing.T) {
 	tokens := strings.Split(result, " ")
 
 	if len(tokens) != commonAuditLogEntryFieldCount {
@@ -160,19 +213,9 @@ func verifyCommonAuditLogEntryFieldResult(result string, t *testing.T) {
 		t.Fatal("user agent does not match")
 	}
 
-	if tokens[5] != taskArn {
+	if tokens[5] != expectedTaskArn {
 		t.Fatal("arn for credentials does not match")
 	}
-}
-
-func verifyAuditLogEntryResult(logLine string, t *testing.T) {
-	tokens := strings.Split(logLine, " ")
-	if len(tokens) != (commonAuditLogEntryFieldCount + getCredentialsEntryFieldCount) {
-		t.Fatalf("Incorrect number of tokens in audit log entry. Expected %d.",
-			commonAuditLogEntryFieldCount+getCredentialsEntryFieldCount)
-	}
-	verifyCommonAuditLogEntryFieldResult(strings.Join(tokens[:commonAuditLogEntryFieldCount], " "), t)
-	verifyConstructAuditLogEntryGetCredentialsResult(strings.Join(tokens[commonAuditLogEntryFieldCount:], " "), t)
 }
 
 func verifyConstructAuditLogEntryGetCredentialsResult(result string, t *testing.T) {
