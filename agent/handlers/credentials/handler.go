@@ -134,7 +134,7 @@ func processCredentialsV1Request(credentialsManager credentials.Manager, r *http
 		return nil, msg, errors.New(errText)
 	}
 
-	credentials, ok := credentialsManager.GetCredentials(credentialsId)
+	credentials, ok := credentialsManager.GetTaskCredentials(credentialsId)
 	if !ok {
 		errText := "CredentialsV1Request: ID not found"
 		log.Infof("%s. Request IP Address: %s", errText, r.RemoteAddr)
@@ -158,7 +158,7 @@ func processCredentialsV1Request(credentialsManager credentials.Manager, r *http
 		return nil, msg, errors.New(errText)
 	}
 
-	credentialsJSON, err := json.Marshal(credentials)
+	credentialsJSON, err := json.Marshal(credentials.IAMRoleCredentials)
 	if err != nil {
 		errText := "CredentialsV1Request: Error marshaling credentials"
 		log.Errorf("%s. Request IP Address: %s", errText, r.RemoteAddr)
