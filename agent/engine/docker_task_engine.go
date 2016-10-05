@@ -222,18 +222,19 @@ func (engine *DockerTaskEngine) synchronizeState() {
 			if cont.DockerId == "" {
 				log.Debug("Found container potentially created while we were down", "name", cont.DockerName)
 				// Figure out the dockerid
-				describedCont, err := engine.client.InspectContainer(cont.DockerName, inspectContainerTimeout)
-				if err != nil {
+				containerMetadata := engine.client.InspectContainer(cont.DockerName, inspectContainerTimeout)
+				if containerMetadata.Error != nil {
 					log.Warn("Could not find matching container for expected", "name", cont.DockerName)
 				} else {
-					cont.DockerId = describedCont.ID
+					cont.DockerId = containerMetadata.DockerID
 					// update mappings that need dockerid
 					engine.state.AddContainer(cont, task)
 					engine.imageManager.AddContainerReferenceToImageState(cont.Container)
 				}
 			}
 			if cont.DockerId != "" {
-				currentState, metadata := engine.client.DescribeContainer(cont.DockerId)
+				var currentState api.ContainerStatus
+				metadata := engine.client.DescribeContainer(cont.DockerId)
 				if metadata.Error != nil {
 					currentState = api.ContainerStopped
 					if !cont.Container.KnownTerminal() {
@@ -242,6 +243,7 @@ func (engine *DockerTaskEngine) synchronizeState() {
 						engine.imageManager.RemoveContainerReferenceFromImageState(cont.Container)
 					}
 				} else {
+					currentState = metadata.Status
 					engine.imageManager.AddContainerReferenceToImageState(cont.Container)
 				}
 				if currentState > cont.Container.GetKnownStatus() {
@@ -267,7 +269,7 @@ func (engine *DockerTaskEngine) CheckTaskState(task *api.Task) {
 		if !ok {
 			continue
 		}
-		status, metadata := engine.client.DescribeContainer(dockerContainer.DockerId)
+		metadata := engine.client.DescribeContainer(dockerContainer.DockerId)
 		engine.processTasks.RLock()
 		managedTask, ok := engine.managedTasks[task.Arn]
 		engine.processTasks.RUnlock()
@@ -276,7 +278,7 @@ func (engine *DockerTaskEngine) CheckTaskState(task *api.Task) {
 			managedTask.dockerMessages <- dockerContainerChange{
 				container: container,
 				event: DockerContainerChangeEvent{
-					Status:                  status,
+					Status:                  metadata.Status,
 					DockerContainerMetadata: metadata,
 				},
 			}
@@ -602,7 +604,8 @@ func (engine *DockerTaskEngine) removeContainer(task *api.Task, container *api.C
 		return errors.New("No container named '" + container.Name + "' created in " + task.Arn)
 	}
 
-	return engine.client.RemoveContainer(dockerContainer.DockerName, removeContainerTimeout)
+	metadata := engine.client.RemoveContainer(dockerContainer.DockerName, removeContainerTimeout)
+	return metadata.Error
 }
 
 // updateTask determines if a new transition needs to be applied to the

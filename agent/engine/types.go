@@ -40,6 +40,7 @@ type DockerContainerMetadata struct {
 	PortBindings []api.PortBinding
 	Error        engineError
 	Volumes      map[string]string
+	Status       api.ContainerStatus
 }
 
 // ListContainersResponse encapsulates the response from the docker client for the
