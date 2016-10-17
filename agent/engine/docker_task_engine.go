@@ -327,7 +327,7 @@ func (engine *DockerTaskEngine) startTask(task *api.Task) {
 	// what tasks need to be waited for for this one to start, and then spin off
 	// a goroutine to oversee this task
 
-	thisTask := engine.newManagedTask(task)
+	thisTask := engine.newManagedTask(task, engine.client)
 	thisTask._time = engine.time()
 
 	go thisTask.overseeTask()
@@ -493,6 +493,10 @@ func (engine *DockerTaskEngine) pullContainer(task *api.Task, container *api.Con
 	return metadata
 }
 
+func (engine *DockerTaskEngine) volumeName(task *api.Task, volume string) string {
+	return "ecs-" + task.Family + "-" + task.Version + "-" + volume + "-" + utils.RandHex()
+}
+
 func (engine *DockerTaskEngine) createContainer(task *api.Task, container *api.Container) DockerContainerMetadata {
 	log.Info("Creating container", "task", task, "container", container)
 	client := engine.client
@@ -513,7 +517,6 @@ func (engine *DockerTaskEngine) createContainer(task *api.Task, container *api.C
 	if hcerr != nil {
 		return DockerContainerMetadata{Error: api.NamedError(hcerr)}
 	}
-
 	config, err := task.DockerConfig(container)
 	if err != nil {
 		return DockerContainerMetadata{Error: api.NamedError(err)}

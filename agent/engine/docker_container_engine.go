@@ -90,6 +90,8 @@ type DockerClient interface {
 	Version() (string, error)
 	InspectImage(string) (*docker.Image, error)
 	RemoveImage(string, time.Duration) error
+
+	CreateVolume(string, time.Duration) (string, error)
 }
 
 // DockerGoClient wraps the underlying go-dockerclient library.
@@ -168,6 +170,25 @@ func (dg *dockerGoClient) time() ttime.Time {
 		}
 	})
 	return dg._time
+}
+
+func (dg *dockerGoClient) CreateVolume(name string, timeout time.Duration) (string, error) {
+	client, err := dg.dockerClient()
+	if err != nil {
+		return "", CannotGetDockerClientError{version: dg.version, err: err}
+	}
+
+	opts := docker.CreateVolumeOptions{
+		Name: name,
+	}
+
+	vol, err := client.CreateVolume(opts)
+	if err != nil {
+		return "", err
+	}
+
+	seelog.Debugf("Created volume: %v", vol)
+	return vol.Mountpoint, nil
 }
 
 func (dg *dockerGoClient) PullImage(image string, authData *api.RegistryAuthenticationData) DockerContainerMetadata {
@@ -379,6 +400,7 @@ func (dg *dockerGoClient) createContainer(ctx context.Context, config *docker.Co
 		Name:       name,
 		Context:    ctx,
 	}
+	seelog.Debugf("containerOptions: Config: %+v HostConfig: %+v", config, hostConfig)
 	dockerContainer, err := client.CreateContainer(containerOptions)
 	if err != nil {
 		return DockerContainerMetadata{Error: CannotXContainerError{"Create", err.Error()}}

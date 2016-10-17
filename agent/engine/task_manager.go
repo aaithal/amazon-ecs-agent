@@ -20,6 +20,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dependencygraph"
+	"github.com/aws/amazon-ecs-agent/agent/engine/dockerclient"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime"
 	"github.com/cihub/seelog"
 )
@@ -79,6 +80,7 @@ type managedTask struct {
 	// thing managing the container.
 	unexpectedStart sync.Once
 
+	client    DockerClient
 	_time     ttime.Time
 	_timeOnce sync.Once
 }
@@ -86,12 +88,13 @@ type managedTask struct {
 // newManagedTask is a method on DockerTaskEngine to create a new managedTask.
 // This method must only be called when the engine.processTasks write lock is
 // already held.
-func (engine *DockerTaskEngine) newManagedTask(task *api.Task) *managedTask {
+func (engine *DockerTaskEngine) newManagedTask(task *api.Task, client DockerClient) *managedTask {
 	t := &managedTask{
 		Task:           task,
 		acsMessages:    make(chan acsTransition),
 		dockerMessages: make(chan dockerContainerChange),
 		engine:         engine,
+		client:         client,
 	}
 	engine.managedTasks[task.Arn] = t
 	return t
@@ -107,23 +110,15 @@ func (mtask *managedTask) overseeTask() {
 	// If this was a 'state restore', send all unsent statuses
 	mtask.emitCurrentStatus()
 
-	if mtask.StartSequenceNumber != 0 && !mtask.GetDesiredStatus().Terminal() {
-		llog.Debug("Waiting for any previous stops to complete", "seqnum", mtask.StartSequenceNumber)
-		othersStopped := make(chan bool, 1)
-		go func() {
-			mtask.engine.taskStopGroup.Wait(mtask.StartSequenceNumber)
-			othersStopped <- true
-		}()
-		for !mtask.waitEvent(othersStopped) {
-			if mtask.GetDesiredStatus().Terminal() {
-				// If we end up here, that means we recieved a start then stop for this
-				// task before a task that was expected to stop before it could
-				// actually stop
-				break
-			}
-		}
-		llog.Debug("Wait over; ready to move towards status: " + mtask.GetDesiredStatus().String())
-	}
+	createResourceResponse := make(chan struct{})
+	go mtask.createResources(createResourceResponse)
+
+	// Wait for other tasks in the same payload message to be stopped before
+	// starting the current task
+	mtask.waitForStops()
+
+	<-createResourceResponse
+
 	for {
 		// If it's steadyState, just spin until we need to do work
 		for mtask.steadyState() {
@@ -167,11 +162,61 @@ func (mtask *managedTask) overseeTask() {
 	if taskCredentialsID != "" {
 		mtask.engine.credentialsManager.RemoveCredentials(taskCredentialsID)
 	}
+
+	mtask.deleteResources()
+
 	if mtask.StopSequenceNumber != 0 {
 		llog.Debug("Marking done for this sequence", "seqnum", mtask.StopSequenceNumber)
 		mtask.engine.taskStopGroup.Done(mtask.StopSequenceNumber)
 	}
 	mtask.cleanupTask(mtask.engine.cfg.TaskCleanupWaitDuration)
+}
+
+func (mtask *managedTask) createResources(response chan<- struct{}) {
+	defer func() {
+		response <- struct{}{}
+	}()
+	vols := mtask.UpdateEmptyHostVolumeNames()
+	seelog.Debugf("Empty volumes to be created for task %s: %v", mtask.Arn, vols)
+	volsToMounts := make(map[string]string)
+	for _, vol := range vols {
+		mount, err := mtask.client.WithVersion(dockerclient.Version_1_21).CreateVolume(vol, 1*time.Second)
+		if err != nil {
+			seelog.Errorf("Error creating volume '%s': %v", vol, err)
+			return
+		}
+		volsToMounts[vol] = mount
+	}
+	mtask.UpdateEmptyVolumeMountPoints(volsToMounts)
+}
+
+func (mtask *managedTask) deleteResources() {
+	vols := mtask.EmptyVolumesToDelete()
+	seelog.Debugf("Empty volumes to be deleted for task %s: %v", mtask.Arn, vols)
+	for _, vol := range vols {
+		seelog.Debugf("Deleting volume: %s", vol)
+	}
+}
+
+func (mtask *managedTask) waitForStops() {
+	llog := log.New("task", mtask.Task)
+	if mtask.StartSequenceNumber != 0 && !mtask.GetDesiredStatus().Terminal() {
+		llog.Debug("Waiting for any previous stops to complete", "seqnum", mtask.StartSequenceNumber)
+		othersStopped := make(chan bool, 1)
+		go func() {
+			mtask.engine.taskStopGroup.Wait(mtask.StartSequenceNumber)
+			othersStopped <- true
+		}()
+		for !mtask.waitEvent(othersStopped) {
+			if mtask.GetDesiredStatus().Terminal() {
+				// If we end up here, that means we recieved a start then stop for this
+				// task before a task that was expected to stop before it could
+				// actually stop
+				break
+			}
+		}
+		llog.Debug("Wait over; ready to move towards status: " + mtask.GetDesiredStatus().String())
+	}
 }
 
 func (mtask *managedTask) emitCurrentStatus() {
@@ -289,9 +334,6 @@ func (mtask *managedTask) handleContainerChange(containerChange dockerContainerC
 	}
 	if event.PortBindings != nil {
 		container.KnownPortBindings = event.PortBindings
-	}
-	if event.Volumes != nil {
-		mtask.UpdateMountPoints(container, event.Volumes)
 	}
 
 	mtask.engine.emitContainerEvent(mtask.Task, container, "")

@@ -23,6 +23,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/amazon-ecs-agent/agent/credentials"
 	"github.com/aws/amazon-ecs-agent/agent/engine/emptyvolume"
+	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime"
 	"github.com/aws/aws-sdk-go/private/protocol/json/jsonutil"
 	"github.com/cihub/seelog"
@@ -45,7 +46,7 @@ func (task *Task) PostUnmarshalTask(credentialsManager credentials.Manager) {
 	// TODO, add rudimentary plugin support and call any plugins that want to
 	// hook into this
 
-	task.initializeEmptyVolumes()
+	// task.initializeEmptyVolumes()
 	task.initializeCredentialsEndpoint(credentialsManager)
 }
 
@@ -81,6 +82,7 @@ func (task *Task) initializeEmptyVolumes() {
 			containerPath := "/ecs-empty-volume/" + volume
 			mountPoints[i] = MountPoint{SourceVolume: volume, ContainerPath: containerPath}
 		}
+		seelog.Debugf("Mountpoints for host volume container: %v", mountPoints)
 		sourceContainer := &Container{
 			Name:          emptyHostVolumeName,
 			Image:         emptyvolume.Image + ":" + emptyvolume.Tag,
@@ -93,6 +95,50 @@ func (task *Task) initializeEmptyVolumes() {
 		task.Containers = append(task.Containers, sourceContainer)
 	}
 
+}
+
+func (task *Task) EmptyVolumesToCreate() []string {
+	requiredEmptyVolumes := make(map[string]bool)
+	for _, container := range task.Containers {
+		for _, mountPoint := range container.MountPoints {
+			vol, ok := task.HostVolumeByName(mountPoint.SourceVolume)
+			if !ok {
+				continue
+			}
+			if emptyHostVolume, ok := vol.(*EmptyHostVolume); ok {
+				if emptyHostVolume.SourcePath() == "" {
+					requiredEmptyVolumes[mountPoint.SourceVolume] = true
+				}
+			}
+		}
+	}
+
+	var emptyVolumes []string
+	for key := range requiredEmptyVolumes {
+		emptyVolumes = append(emptyVolumes, key)
+	}
+	return emptyVolumes
+}
+
+func (task *Task) EmptyVolumesToDelete() []string {
+	requiredEmptyVolumes := make(map[string]bool)
+	for _, container := range task.Containers {
+		for _, mountPoint := range container.MountPoints {
+			vol, ok := task.HostVolumeByName(mountPoint.SourceVolume)
+			if !ok {
+				continue
+			}
+			if _, ok := vol.(*EmptyHostVolume); ok {
+				requiredEmptyVolumes[mountPoint.SourceVolume] = true
+			}
+		}
+	}
+
+	var emptyVolumes []string
+	for key := range requiredEmptyVolumes {
+		emptyVolumes = append(emptyVolumes, key)
+	}
+	return emptyVolumes
 }
 
 // initializeCredentialsEndpoint sets the credentials endpoint for all containers in a task if needed.
@@ -155,20 +201,72 @@ func (task *Task) HostVolumeByName(name string) (HostVolume, bool) {
 	return nil, false
 }
 
-func (task *Task) UpdateMountPoints(cont *Container, vols map[string]string) {
-	for _, mountPoint := range cont.MountPoints {
-		hostPath, ok := vols[mountPoint.ContainerPath]
-		if !ok {
-			// /path/ -> /path
-			hostPath, ok = vols[strings.TrimRight(mountPoint.ContainerPath, "/")]
-		}
-		if ok {
-			if hostVolume, exists := task.HostVolumeByName(mountPoint.SourceVolume); exists {
-				if empty, ok := hostVolume.(*EmptyHostVolume); ok {
-					empty.HostPath = hostPath
+func (task *Task) UpdateEmptyVolumeMountPoints(volsToMounts map[string]string) {
+	for _, container := range task.Containers {
+		for _, mountPoint := range container.MountPoints {
+			vol, ok := task.HostVolumeByName(mountPoint.SourceVolume)
+			if !ok {
+				seelog.Debugf("Container '%s' skipping : %v", container.Name, mountPoint)
+				continue
+			}
+			if emptyHostVolume, ok := vol.(*EmptyHostVolume); ok {
+				seelog.Debugf("Container '%s' empty host volume: %v %v", container.Name, emptyHostVolume.HostPath, emptyHostVolume.SourcePath())
+				if emptyHostVolume.SourcePath() == "" {
+					if sourcePath, ok := volsToMounts[mountPoint.SourceVolume]; ok {
+						seelog.Debugf("Updating container '%s' empty host volume: %v %v", container.Name, emptyHostVolume.HostPath, sourcePath)
+						emptyHostVolume.HostPath = sourcePath
+					}
 				}
 			}
 		}
+	}
+}
+
+func (task *Task) UpdateEmptyHostVolumeNames() []string {
+	emptySourceVolumes := make(map[string]string)
+	for _, container := range task.Containers {
+		for _, mountPoint := range container.MountPoints {
+			vol, ok := task.HostVolumeByName(mountPoint.SourceVolume)
+			if !ok {
+				continue
+			}
+			if _, ok := vol.(*EmptyHostVolume); ok {
+				emptySourceVolumes[mountPoint.SourceVolume] = "ecs-" + task.Family + "-" + task.Version + "-" + mountPoint.SourceVolume + "-" + utils.RandHex()
+			}
+		}
+	}
+
+	seelog.Debugf("Foo emptySourceVolumes: %v", emptySourceVolumes)
+	for ix, container := range task.Containers {
+		for jx, mountPoint := range container.MountPoints {
+			vol, ok := task.HostVolumeByName(mountPoint.SourceVolume)
+			if !ok {
+				continue
+			}
+			if _, ok := vol.(*EmptyHostVolume); ok {
+				task.Containers[ix].MountPoints[jx].SourceVolume = emptySourceVolumes[mountPoint.SourceVolume]
+			}
+		}
+	}
+
+	for ix, vol := range task.Volumes {
+		if name, ok := emptySourceVolumes[vol.Name]; ok {
+			task.Volumes[ix].Name = name
+		}
+	}
+	var emptyVolumes []string
+	for vol := range emptySourceVolumes {
+		emptyVolumes = append(emptyVolumes, emptySourceVolumes[vol])
+	}
+	return emptyVolumes
+}
+
+func (task *Task) LogVolumes() {
+	for _, v := range task.Volumes {
+		seelog.Debugf("Task '%v' volume: %v %v", task.Arn, v.Name, v.Volume.SourcePath())
+	}
+	for _, container := range task.Containers {
+		seelog.Debugf("Container '%v' mountpoints: %v", container.Name, container.MountPoints)
 	}
 }
 
@@ -441,6 +539,7 @@ func (task *Task) dockerHostBinds(container *Container) ([]string, error) {
 		if mountPoint.ReadOnly {
 			bind += ":ro"
 		}
+		log.Debug("added bind mount", "container", container, "bind", bind)
 		binds[i] = bind
 	}
 
