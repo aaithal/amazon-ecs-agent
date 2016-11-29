@@ -103,9 +103,6 @@ type Task struct {
 
 	SentStatus TaskStatus
 
-	containersByNameLock sync.Mutex
-	containersByName     map[string]*Container
-
 	StartSequenceNumber int64
 	StopSequenceNumber  int64
 
@@ -224,6 +221,7 @@ type ContainerOverrides struct {
 type Container struct {
 	Name                   string
 	Image                  string
+	ImageID                string
 	Command                []string
 	Cpu                    uint
 	Memory                 uint

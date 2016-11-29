@@ -80,9 +80,6 @@ const (
 	// minimumNumImagesToDeletePerCycle specifies the minimum number of images that to be deleted when
 	// performing image cleanup.
 	minimumNumImagesToDeletePerCycle = 1
-
-	// defaultAuditLogFile specifies the default audit log filename
-	defaultCredentialsAuditLogFile = "/log/audit.log"
 )
 
 // Merge merges two config files, preferring the ones on the left. Any nil or
@@ -176,26 +173,6 @@ func (cfg *Config) trimWhitespace() {
 		}
 		str := cfgField.Interface().(string)
 		cfgField.SetString(strings.TrimSpace(str))
-	}
-}
-
-func DefaultConfig() Config {
-	return Config{
-		DockerEndpoint:              "unix:///var/run/docker.sock",
-		ReservedPorts:               []uint16{SSHPort, DockerReservedPort, DockerReservedSSLPort, AgentIntrospectionPort, AgentCredentialsPort},
-		ReservedPortsUDP:            []uint16{},
-		DataDir:                     "/data/",
-		DisableMetrics:              false,
-		ReservedMemory:              0,
-		AvailableLoggingDrivers:     []dockerclient.LoggingDriver{dockerclient.JsonFileDriver},
-		TaskCleanupWaitDuration:     DefaultTaskCleanupWaitDuration,
-		DockerStopTimeout:           DefaultDockerStopTimeout,
-		CredentialsAuditLogFile:     defaultCredentialsAuditLogFile,
-		CredentialsAuditLogDisabled: false,
-		ImageCleanupDisabled:        false,
-		MinimumImageDeletionAge:     DefaultImageDeletionAge,
-		ImageCleanupInterval:        DefaultImageCleanupTimeInterval,
-		NumImagesToDeletePerCycle:   DefaultNumImagesToDeletePerCycle,
 	}
 }
 
@@ -314,8 +291,9 @@ func environmentConfig() Config {
 	imageCleanupDisabled := utils.ParseBool(os.Getenv("ECS_DISABLE_IMAGE_CLEANUP"), false)
 	minimumImageDeletionAge := parseEnvVariableDuration("ECS_IMAGE_MINIMUM_CLEANUP_AGE")
 	imageCleanupInterval := parseEnvVariableDuration("ECS_IMAGE_CLEANUP_INTERVAL")
-	numImagesToDeletePerCycle, err := strconv.Atoi(os.Getenv("ECS_NUM_IMAGES_DELETE_PER_CYCLE"))
-	if err != nil {
+	numImagesToDeletePerCycleEnvVal := os.Getenv("ECS_NUM_IMAGES_DELETE_PER_CYCLE")
+	numImagesToDeletePerCycle, err := strconv.Atoi(numImagesToDeletePerCycleEnvVal)
+	if numImagesToDeletePerCycleEnvVal != "" && err != nil {
 		seelog.Warnf("Invalid format for \"ECS_NUM_IMAGES_DELETE_PER_CYCLE\", expected an integer. err %v", err)
 	}
 
@@ -456,6 +434,8 @@ func (config *Config) validateAndOverrideBounds() error {
 		seelog.Warnf("Invalid value for number of images to delete for image cleanup, will be overriden with the default value: %d. Parsed value: %d, minimum value: %d.", DefaultImageDeletionAge, config.NumImagesToDeletePerCycle, minimumNumImagesToDeletePerCycle)
 		config.NumImagesToDeletePerCycle = DefaultNumImagesToDeletePerCycle
 	}
+
+	config.platformOverrides()
 
 	return nil
 }
