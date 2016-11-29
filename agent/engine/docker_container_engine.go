@@ -30,6 +30,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerclient"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockeriface"
 	"github.com/aws/amazon-ecs-agent/agent/engine/emptyvolume"
+	"github.com/aws/amazon-ecs-agent/agent/timer"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime"
 	"github.com/cihub/seelog"
 
@@ -83,7 +84,7 @@ func invokeTimedDockerAPI(operation string, transition string, timeout time.Dura
 	select {
 	case resp := <-response:
 		startTime := ctx.Value("time").(time.Time)
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    0,
 			Operation: operation + "Container",
@@ -91,7 +92,7 @@ func invokeTimedDockerAPI(operation string, transition string, timeout time.Dura
 		return resp
 	case <-ctx.Done():
 		startTime := ctx.Value("time").(time.Time)
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    1,
 			Operation: operation + "Container",
@@ -242,14 +243,14 @@ func (dg *dockerGoClient) pullImage(image string, authData *api.RegistryAuthenti
 	startTime := time.Now()
 	authConfig, err := dg.getAuthdata(image, authData)
 	if err != nil {
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    1,
 			Operation: "GetAuthData",
 		})
 		return DockerContainerMetadata{Error: CannotXContainerError{"Pull", err.Error()}}
 	}
-	tLogger.log(TimerEntry{
+	timer.TLogger.Log(timer.TimerEntry{
 		Duration:  time.Now().Sub(startTime).Nanoseconds(),
 		Result:    0,
 		Operation: "GetAuthData",
@@ -316,7 +317,7 @@ func (dg *dockerGoClient) pullImage(image string, authData *api.RegistryAuthenti
 	case <-pullBegan:
 		break
 	case pullErr := <-pullFinished:
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    1,
 			Operation: "PullImage",
@@ -326,7 +327,7 @@ func (dg *dockerGoClient) pullImage(image string, authData *api.RegistryAuthenti
 		}
 		return DockerContainerMetadata{}
 	case <-timeout:
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    1,
 			Operation: "PullImage",
@@ -338,14 +339,14 @@ func (dg *dockerGoClient) pullImage(image string, authData *api.RegistryAuthenti
 
 	err = <-pullFinished
 	if err != nil {
-		tLogger.log(TimerEntry{
+		timer.TLogger.Log(timer.TimerEntry{
 			Duration:  time.Now().Sub(startTime).Nanoseconds(),
 			Result:    1,
 			Operation: "PullImage",
 		})
 		return DockerContainerMetadata{Error: CannotXContainerError{"Pull", err.Error()}}
 	}
-	tLogger.log(TimerEntry{
+	timer.TLogger.Log(timer.TimerEntry{
 		Duration:  time.Now().Sub(startTime).Nanoseconds(),
 		Result:    0,
 		Operation: "PullImage",

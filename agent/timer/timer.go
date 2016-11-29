@@ -11,7 +11,7 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package engine
+package timer
 
 import (
 	"encoding/json"
@@ -19,11 +19,11 @@ import (
 	"github.com/cihub/seelog"
 )
 
-type timerLogger struct {
+type TimerLogger struct {
 	logger seelog.LoggerInterface
 }
 
-func newTimerLogger() *timerLogger {
+func newTimerLogger() *TimerLogger {
 	config := `
 	<seelog type="asyncloop" minlevel="info">
 		<outputs formatid="main">
@@ -39,12 +39,12 @@ func newTimerLogger() *timerLogger {
 	if err != nil {
 		seelog.Errorf("Error creating timer logger: %v", err)
 	}
-	return &timerLogger{
+	return &TimerLogger{
 		logger: l,
 	}
 }
 
-var tLogger = newTimerLogger()
+var TLogger = newTimerLogger()
 
 type TimerEntry struct {
 	Operation string `json:"Operation"`
@@ -52,7 +52,7 @@ type TimerEntry struct {
 	Result    int    `json:"Result"`
 }
 
-func (tLgr *timerLogger) log(entry TimerEntry) {
+func (tLgr *TimerLogger) Log(entry TimerEntry) {
 	bytes, _ := json.Marshal(entry)
 	tLgr.logger.Info(string(bytes))
 }

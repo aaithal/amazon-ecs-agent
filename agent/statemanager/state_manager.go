@@ -27,6 +27,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/logger"
+	"github.com/aws/amazon-ecs-agent/agent/timer"
 )
 
 // EcsDataVersion is the current version of saved data. Any backwards or
@@ -163,6 +164,14 @@ func AddSaveable(name string, saveable Saveable) Option {
 // Save triggers a save to file, though respects a minimum save interval to wait
 // between saves.
 func (manager *basicStateManager) Save() error {
+	startTime := time.Now()
+	defer func(startTime time.Time) {
+		timer.TLogger.Log(timer.TimerEntry{
+			Duration:  time.Now().Sub(startTime).Nanoseconds(),
+			Result:    0,
+			Operation: "StateSave",
+		})
+	}(startTime)
 	manager.saveTimesLock.Lock()
 	defer manager.saveTimesLock.Unlock()
 	if time.Since(manager.lastSave) >= minSaveInterval {
@@ -193,6 +202,14 @@ func (manager *basicStateManager) Save() error {
 // In addition, the StateManager internally buffers save requests in order to
 // only save at most every STATE_SAVE_INTERVAL.
 func (manager *basicStateManager) ForceSave() error {
+	startTime := time.Now()
+	defer func(startTime time.Time) {
+		timer.TLogger.Log(timer.TimerEntry{
+			Duration:  time.Now().Sub(startTime).Nanoseconds(),
+			Result:    0,
+			Operation: "StateForceSave",
+		})
+	}(startTime)
 	manager.savingLock.Lock()
 	defer manager.savingLock.Unlock()
 	log.Info("Saving state!")

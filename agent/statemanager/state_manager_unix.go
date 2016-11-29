@@ -19,6 +19,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/aws/amazon-ecs-agent/agent/timer"
 )
 
 /*
@@ -58,6 +61,14 @@ func (manager *basicStateManager) readFile() ([]byte, error) {
 }
 
 func (manager *basicStateManager) writeFile(data []byte) error {
+	startTime := time.Now()
+	defer func(startTime time.Time) {
+		timer.TLogger.Log(timer.TimerEntry{
+			Duration:  time.Now().Sub(startTime).Nanoseconds(),
+			Result:    0,
+			Operation: "StateWriteFile",
+		})
+	}(startTime)
 	// Make our temp-file on the same volume as our data-file to ensure we can
 	// actually move it atomically; cross-device renaming will error out.
 	tmpfile, err := ioutil.TempFile(manager.statePath, "tmp_ecs_agent_data")
