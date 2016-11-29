@@ -78,6 +78,7 @@ func invokeTimedDockerAPI(operation string, transition string, timeout time.Dura
 	// Buffered channel so in the case of timeout it takes one write, never gets
 	// read, and can still be GC'd
 	response := make(chan DockerContainerMetadata, 1)
+	seelog.Debugf("Invoking docker api operation: %s arg: %s", operation, arg)
 	go func() { response <- worker(ctx, arg) }()
 	select {
 	case resp := <-response:

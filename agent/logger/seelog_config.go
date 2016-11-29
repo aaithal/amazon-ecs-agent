@@ -25,7 +25,7 @@ func loggerConfig() string {
 	config += `
 		</outputs>
 		<formats>
-			<format id="main" format="%UTCDate(2006-01-02T15:04:05Z07:00) [%LEVEL] %Msg%n" />
+			<format id="main" format="%UTCDate(2006-01-02T15:04:05.999999999Z07:00) [%LEVEL] %Msg%n" />
 		</formats>
 	</seelog>
 `
