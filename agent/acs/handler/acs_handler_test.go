@@ -154,7 +154,7 @@ func TestAcsWsUrl(t *testing.T) {
 	if parsed.Query().Get("agentHash") != version.GitHashString() {
 		t.Fatal("Wrong cluster")
 	}
-	if parsed.Query().Get("dockerVersion") != "Docker version result" {
+	if parsed.Query().Get("dockerVersion") != "DockerVersion: Docker version result" {
 		t.Fatal("Wrong docker version")
 	}
 	if parsed.Query().Get(sendCredentialsURLParameterName) != "true" {
