@@ -33,6 +33,8 @@ import (
 const (
 	emptyHostVolumeName = "~internal~ecs-emptyvolume-source"
 
+	pauseContainerName = "~internal~ecs~pause"
+
 	// awsSDKCredentialsRelativeURIPathEnvironmentVariableName defines the name of the environment
 	// variable containers' config, which will be used by the AWS SDK to fetch
 	// credentials.
@@ -48,6 +50,7 @@ func (task *Task) PostUnmarshalTask(credentialsManager credentials.Manager) {
 	task.adjustForPlatform()
 	task.initializeEmptyVolumes()
 	task.initializeCredentialsEndpoint(credentialsManager)
+	task.initializePauseContainer()
 }
 
 func (task *Task) initializeEmptyVolumes() {
@@ -95,6 +98,24 @@ func (task *Task) initializeEmptyVolumes() {
 		task.Containers = append(task.Containers, sourceContainer)
 	}
 
+}
+
+func (task *Task) initializePauseContainer() {
+	for _, container := range task.Containers {
+		if container.RunDependencies == nil {
+			container.RunDependencies = make([]string, 0)
+		}
+		container.RunDependencies = append(container.RunDependencies, pauseContainerName)
+	}
+
+	pauseContainer := &Container{
+		Name:          pauseContainerName,
+		Image:         "gcr.io/google_containers/pause:0.8.0",
+		Essential:     true,
+		IsInternal:    true,
+		DesiredStatus: ContainerRunning,
+	}
+	task.Containers = append(task.Containers, pauseContainer)
 }
 
 // initializeCredentialsEndpoint sets the credentials endpoint for all containers in a task if needed.
@@ -361,6 +382,9 @@ func (task *Task) dockerHostConfig(container *Container, dockerContainerMap map[
 		}
 	}
 
+	if pauseContainer, ok := dockerContainerMap[pauseContainerName]; ok {
+		hostConfig.NetworkMode = "container:" + pauseContainer.DockerId
+	}
 	return hostConfig, nil
 }
 

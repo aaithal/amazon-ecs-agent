@@ -509,6 +509,10 @@ func (engine *DockerTaskEngine) createContainer(task *api.Task, container *api.C
 		containerMap = make(map[string]*api.DockerContainer)
 	}
 
+	for name, container := range containerMap {
+		seelog.Infof("TaskEngine container map entry: %s -> (%s, %s)", name, container.DockerId, container.DockerName)
+	}
+
 	hostConfig, hcerr := task.DockerHostConfig(container, containerMap)
 	if hcerr != nil {
 		return DockerContainerMetadata{Error: api.NamedError(hcerr)}
