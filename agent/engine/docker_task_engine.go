@@ -353,7 +353,7 @@ func (engine *DockerTaskEngine) time() ttime.Time {
 // It will omit events the backend would not process and will perform best-effort deduplication of events.
 func (engine *DockerTaskEngine) emitContainerEvent(task *api.Task, cont *api.Container, reason string) {
 	contKnownStatus := cont.GetKnownStatus()
-	if !contKnownStatus.BackendRecognized() {
+	if !contKnownStatus.ShouldReportToBackend() {
 		return
 	}
 	if cont.IsInternal {
@@ -370,7 +370,7 @@ func (engine *DockerTaskEngine) emitContainerEvent(task *api.Task, cont *api.Con
 	event := api.ContainerStateChange{
 		TaskArn:       task.Arn,
 		ContainerName: cont.Name,
-		Status:        contKnownStatus,
+		Status:        contKnownStatus.GetBackendRecognizedStatus(),
 		ExitCode:      cont.KnownExitCode,
 		PortBindings:  cont.KnownPortBindings,
 		Reason:        reason,
@@ -615,6 +615,15 @@ func (engine *DockerTaskEngine) startContainer(task *api.Task, container *api.Co
 	return client.StartContainer(dockerContainer.DockerID, startContainerTimeout)
 }
 
+func (engine *DockerTaskEngine) configureContainerResources(task *api.Task, container *api.Container) DockerContainerMetadata {
+	log.Info("Configuring container resources", "task", task, "container", container)
+
+	time.Sleep(time.Minute)
+
+	log.Info("Configured container resources", "task", task, "container", container)
+	return DockerContainerMetadata{}
+}
+
 func (engine *DockerTaskEngine) stopContainer(task *api.Task, container *api.Container) DockerContainerMetadata {
 	log.Info("Stopping container", "task", task, "container", container)
 	containerMap, ok := engine.state.ContainerMapByArn(task.Arn)
@@ -673,10 +682,11 @@ func (engine *DockerTaskEngine) updateTask(task *api.Task, update *api.Task) {
 
 func (engine *DockerTaskEngine) transitionFunctionMap() map[api.ContainerStatus]transitionApplyFunc {
 	return map[api.ContainerStatus]transitionApplyFunc{
-		api.ContainerPulled:  engine.pullContainer,
-		api.ContainerCreated: engine.createContainer,
-		api.ContainerRunning: engine.startContainer,
-		api.ContainerStopped: engine.stopContainer,
+		api.ContainerPulled:         engine.pullContainer,
+		api.ContainerCreated:        engine.createContainer,
+		api.ContainerRunning:        engine.startContainer,
+		api.ContainerResourcesReady: engine.configureContainerResources,
+		api.ContainerStopped:        engine.stopContainer,
 	}
 }
 

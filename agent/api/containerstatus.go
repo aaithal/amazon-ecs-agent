@@ -22,6 +22,9 @@ const (
 	ContainerCreated
 	// ContainerRunning represents a container that has started
 	ContainerRunning
+	// ContainerResourcesReady represents a container that has completed provisioning
+	// all of it's resources
+	ContainerResourcesReady
 	// ContainerStopped represents a container that has stopped
 	ContainerStopped
 	// ContainerZombie is an "impossible" state that is used as the maximum
@@ -32,31 +35,12 @@ const (
 type ContainerStatus int32
 
 var containerStatusMap = map[string]ContainerStatus{
-	"NONE":    ContainerStatusNone,
-	"PULLED":  ContainerPulled,
-	"CREATED": ContainerCreated,
-	"RUNNING": ContainerRunning,
-	"STOPPED": ContainerStopped,
-}
-
-// ContainerStatus maps the task status to the corresponding container status
-func (ts *TaskStatus) ContainerStatus() ContainerStatus {
-	switch *ts {
-	case TaskStatusNone:
-		return ContainerStatusNone
-	case TaskCreated:
-		return ContainerCreated
-	case TaskRunning:
-		return ContainerRunning
-	case TaskStopped:
-		return ContainerStopped
-	}
-	return ContainerStatusNone
-}
-
-// Terminal returns true if the Task status is STOPPED
-func (ts TaskStatus) Terminal() bool {
-	return ts == TaskStopped
+	"NONE":            ContainerStatusNone,
+	"PULLED":          ContainerPulled,
+	"CREATED":         ContainerCreated,
+	"RUNNING":         ContainerRunning,
+	"RESOURCES_READY": ContainerResourcesReady,
+	"STOPPED":         ContainerStopped,
 }
 
 // String returns a human readable string representation of this object
@@ -77,6 +61,8 @@ func (cs *ContainerStatus) TaskStatus() TaskStatus {
 	case ContainerCreated:
 		return TaskCreated
 	case ContainerRunning:
+		return TaskCreated
+	case ContainerResourcesReady:
 		return TaskRunning
 	case ContainerStopped:
 		return TaskStopped
@@ -89,6 +75,22 @@ func (cs *ContainerStatus) TaskStatus() TaskStatus {
 // states
 func (cs *ContainerStatus) BackendRecognized() bool {
 	return *cs == ContainerRunning || *cs == ContainerStopped
+}
+
+func (cs *ContainerStatus) ShouldReportToBackend() bool {
+	return *cs == ContainerResourcesReady || *cs == ContainerStopped
+}
+
+func (cs *ContainerStatus) GetBackendRecognizedStatus() ContainerStatus {
+	if *cs == ContainerResourcesReady {
+		return ContainerRunning
+	}
+
+	if *cs == ContainerStopped {
+		return ContainerStopped
+	}
+
+	return ContainerStatusNone
 }
 
 // Terminal returns true if the container status is STOPPED

@@ -100,7 +100,8 @@ func DependenciesAreResolved(target *api.Container, by []*api.Container) bool {
 
 	return verifyStatusResolveable(target, nameMap, neededVolumeContainers, volumeIsResolved) &&
 		verifyStatusResolveable(target, nameMap, linksToContainerNames(target.Links), linkIsResolved) &&
-		verifyStatusResolveable(target, nameMap, target.RunDependencies, onRunIsResolved)
+		verifyStatusResolveable(target, nameMap, target.RunDependencies, onRunIsResolved) &&
+		verifyStatusResolveable(target, nameMap, target.ResourceDependecies, onResourcesAreReady)
 }
 
 // verifyStatusResolveable validates that `target` can be resolved given that
@@ -182,6 +183,15 @@ func volumeIsResolved(target *api.Container, volume *api.Container) bool {
 func onRunIsResolved(target *api.Container, run *api.Container) bool {
 	if target.GetDesiredStatus() >= api.ContainerCreated {
 		return run.GetKnownStatus() >= api.ContainerRunning
+	}
+	return false
+}
+
+// onResourcesAreReady defines a relationship where a target cannot be created until
+// 'ready' has reached the resource ready state.
+func onResourcesAreReady(target *api.Container, run *api.Container) bool {
+	if target.GetDesiredStatus() >= api.ContainerCreated {
+		return run.GetKnownStatus() >= api.ContainerResourcesReady
 	}
 	return false
 }

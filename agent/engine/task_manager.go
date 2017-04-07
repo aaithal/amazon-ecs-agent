@@ -352,6 +352,7 @@ func (mtask *managedTask) waitEvent(stopWaiting <-chan bool) bool {
 // 'None, false, false' -> "This should not be moved; it has unresolved dependencies or is complete; no knownstatus change"
 func (mtask *managedTask) containerNextState(container *api.Container) (api.ContainerStatus, bool, bool) {
 	clog := log.New("task", mtask.Task, "container", container)
+	clog.Debug("determining next state")
 	containerKnownStatus := container.GetKnownStatus()
 	containerDesiredStatus := container.GetDesiredStatus()
 	if containerKnownStatus == containerDesiredStatus {
@@ -423,7 +424,7 @@ func (mtask *managedTask) progressContainers() {
 			// Ack, really bad. We want it to stop but the containers don't think
 			// that's possible... let's just break out and hope for the best!
 			log.Crit("The state is so bad that we're just giving up on it")
-			mtask.UpdateKnownStatusAndTime(api.TaskStopped)
+			mtask.SetKnownStatus(api.TaskStopped)
 			mtask.engine.emitTaskEvent(mtask.Task, "TaskStateError: Agent could not progress task's state to stopped")
 		} else {
 			log.Crit("Moving task to stopped due to bad state", "task", mtask.Task)

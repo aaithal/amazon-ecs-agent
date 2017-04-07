@@ -36,6 +36,21 @@ var taskStatusMap = map[string]TaskStatus{
 	"STOPPED": TaskStopped,
 }
 
+// ContainerStatus maps the task status to the corresponding container status
+func (ts *TaskStatus) ContainerStatus() ContainerStatus {
+	switch *ts {
+	case TaskStatusNone:
+		return ContainerStatusNone
+	case TaskCreated:
+		return ContainerCreated
+	case TaskRunning:
+		return ContainerResourcesReady
+	case TaskStopped:
+		return ContainerStopped
+	}
+	return ContainerStatusNone
+}
+
 // String returns a human readable string representation of this object
 func (ts TaskStatus) String() string {
 	for k, v := range taskStatusMap {
@@ -62,4 +77,9 @@ func (ts *TaskStatus) BackendStatus() string {
 // states
 func (ts *TaskStatus) BackendRecognized() bool {
 	return *ts == TaskRunning || *ts == TaskStopped
+}
+
+// Terminal returns true if the Task status is STOPPED
+func (ts TaskStatus) Terminal() bool {
+	return ts == TaskStopped
 }
