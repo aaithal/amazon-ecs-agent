@@ -43,9 +43,9 @@ func dockerMap(task *Task) map[string]*DockerContainer {
 func TestTaskOverridden(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name:  "c1",
-				Ports: []PortBinding{PortBinding{10, 10, "", TransportProtocolTCP}},
+				Ports: []PortBinding{{10, 10, "", TransportProtocolTCP}},
 			},
 		},
 	}
@@ -59,9 +59,9 @@ func TestTaskOverridden(t *testing.T) {
 func TestDockerConfigPortBinding(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name:  "c1",
-				Ports: []PortBinding{PortBinding{10, 10, "", TransportProtocolTCP}, PortBinding{20, 20, "", TransportProtocolUDP}},
+				Ports: []PortBinding{{10, 10, "", TransportProtocolTCP}, {20, 20, "", TransportProtocolUDP}},
 			},
 		},
 	}
@@ -84,7 +84,7 @@ func TestDockerConfigPortBinding(t *testing.T) {
 func TestDockerConfigCPUShareZero(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				CPU:  0,
 			},
@@ -104,7 +104,7 @@ func TestDockerConfigCPUShareZero(t *testing.T) {
 func TestDockerConfigCPUShareMinimum(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				CPU:  1,
 			},
@@ -124,7 +124,7 @@ func TestDockerConfigCPUShareMinimum(t *testing.T) {
 func TestDockerConfigCPUShareUnchanged(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				CPU:  100,
 			},
@@ -144,9 +144,9 @@ func TestDockerConfigCPUShareUnchanged(t *testing.T) {
 func TestDockerHostConfigPortBinding(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name:  "c1",
-				Ports: []PortBinding{PortBinding{10, 10, "", TransportProtocolTCP}, PortBinding{20, 20, "", TransportProtocolUDP}},
+				Ports: []PortBinding{{10, 10, "", TransportProtocolTCP}, {20, 20, "", TransportProtocolUDP}},
 			},
 		},
 	}
@@ -170,12 +170,12 @@ func TestDockerHostConfigPortBinding(t *testing.T) {
 func TestDockerHostConfigVolumesFrom(t *testing.T) {
 	testTask := &Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 			},
-			&Container{
+			{
 				Name:        "c2",
-				VolumesFrom: []VolumeFrom{VolumeFrom{SourceContainer: "c1"}},
+				VolumesFrom: []VolumeFrom{{SourceContainer: "c1"}},
 			},
 		},
 	}
@@ -199,7 +199,7 @@ func TestDockerHostConfigRawConfig(t *testing.T) {
 			Type:   "foo",
 			Config: map[string]string{"foo": "bar"},
 		},
-		Ulimits: []docker.ULimit{docker.ULimit{Name: "ulimit name", Soft: 10, Hard: 100}},
+		Ulimits: []docker.ULimit{{Name: "ulimit name", Soft: 10, Hard: 100}},
 	}
 
 	rawHostConfig, err := json.Marshal(&rawHostConfigInput)
@@ -212,7 +212,7 @@ func TestDockerHostConfigRawConfig(t *testing.T) {
 		Family:  "myFamily",
 		Version: "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				DockerConfig: DockerConfig{
 					HostConfig: strptr(string(rawHostConfig)),
@@ -249,17 +249,17 @@ func TestDockerHostConfigRawConfigMerging(t *testing.T) {
 		Family:  "myFamily",
 		Version: "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name:        "c1",
 				Image:       "image",
 				CPU:         50,
 				Memory:      100,
-				VolumesFrom: []VolumeFrom{VolumeFrom{SourceContainer: "c2"}},
+				VolumesFrom: []VolumeFrom{{SourceContainer: "c2"}},
 				DockerConfig: DockerConfig{
 					HostConfig: strptr(string(rawHostConfig)),
 				},
 			},
-			&Container{
+			{
 				Name: "c2",
 			},
 		},
@@ -319,7 +319,7 @@ func TestBadDockerHostConfigRawConfig(t *testing.T) {
 			Family:  "myFamily",
 			Version: "1",
 			Containers: []*Container{
-				&Container{
+				{
 					Name: "c1",
 					DockerConfig: DockerConfig{
 						HostConfig: strptr(badHostConfig),
@@ -352,7 +352,7 @@ func TestDockerConfigRawConfig(t *testing.T) {
 		Family:  "myFamily",
 		Version: "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				DockerConfig: DockerConfig{
 					Config: strptr(string(rawConfig)),
@@ -383,7 +383,7 @@ func TestDockerConfigRawConfigNilLabel(t *testing.T) {
 		Family:  "myFamily",
 		Version: "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name: "c1",
 				DockerConfig: DockerConfig{
 					Config: strptr(string(rawConfig)),
@@ -417,7 +417,7 @@ func TestDockerConfigRawConfigMerging(t *testing.T) {
 		Family:  "myFamily",
 		Version: "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name:   "c1",
 				Image:  "image",
 				CPU:    50,
@@ -451,7 +451,7 @@ func TestBadDockerConfigRawConfig(t *testing.T) {
 			Family:  "myFamily",
 			Version: "1",
 			Containers: []*Container{
-				&Container{
+				{
 					Name: "c1",
 					DockerConfig: DockerConfig{
 						Config: strptr(badConfig),
@@ -474,11 +474,11 @@ func TestGetCredentialsEndpointWhenCredentialsAreSet(t *testing.T) {
 	credentialsIDInTask := "credsid"
 	task := Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name:        "c1",
 				Environment: make(map[string]string),
 			},
-			&Container{
+			{
 				Name:        "c2",
 				Environment: make(map[string]string),
 			}},
@@ -509,11 +509,11 @@ func TestGetCredentialsEndpointWhenCredentialsAreNotSet(t *testing.T) {
 
 	task := Task{
 		Containers: []*Container{
-			&Container{
+			{
 				Name:        "c1",
 				Environment: make(map[string]string),
 			},
-			&Container{
+			{
 				Name:        "c2",
 				Environment: make(map[string]string),
 			}},
@@ -540,19 +540,19 @@ func TestPostUnmarshalTaskWithEmptyVolumes(t *testing.T) {
 		Family:        strptr("myFamily"),
 		Version:       strptr("1"),
 		Containers: []*ecsacs.Container{
-			&ecsacs.Container{
+			{
 				Name: strptr("myName1"),
 				MountPoints: []*ecsacs.MountPoint{
-					&ecsacs.MountPoint{
+					{
 						ContainerPath: strptr(emptyVolumeContainerPath1),
 						SourceVolume:  strptr(emptyVolumeName1),
 					},
 				},
 			},
-			&ecsacs.Container{
+			{
 				Name: strptr("myName2"),
 				MountPoints: []*ecsacs.MountPoint{
-					&ecsacs.MountPoint{
+					{
 						ContainerPath: strptr(emptyVolumeContainerPath2),
 						SourceVolume:  strptr(emptyVolumeName2),
 					},
@@ -560,11 +560,11 @@ func TestPostUnmarshalTaskWithEmptyVolumes(t *testing.T) {
 			},
 		},
 		Volumes: []*ecsacs.Volume{
-			&ecsacs.Volume{
+			{
 				Name: strptr(emptyVolumeName1),
 				Host: &ecsacs.HostVolumeProperties{},
 			},
-			&ecsacs.Volume{
+			{
 				Name: strptr(emptyVolumeName2),
 				Host: &ecsacs.HostVolumeProperties{},
 			},
@@ -609,7 +609,7 @@ func TestTaskFromACS(t *testing.T) {
 		Family:        strptr("myFamily"),
 		Version:       strptr("1"),
 		Containers: []*ecsacs.Container{
-			&ecsacs.Container{
+			{
 				Name:        strptr("myName"),
 				Cpu:         intptr(10),
 				Command:     []*string{strptr("command"), strptr("command2")},
@@ -620,7 +620,7 @@ func TestTaskFromACS(t *testing.T) {
 				Links:       []*string{strptr("link1"), strptr("link2")},
 				Memory:      intptr(100),
 				MountPoints: []*ecsacs.MountPoint{
-					&ecsacs.MountPoint{
+					{
 						ContainerPath: strptr("/container/path"),
 						ReadOnly:      boolptr(true),
 						SourceVolume:  strptr("sourceVolume"),
@@ -628,14 +628,14 @@ func TestTaskFromACS(t *testing.T) {
 				},
 				Overrides: strptr(`{"command":["a","b","c"]}`),
 				PortMappings: []*ecsacs.PortMapping{
-					&ecsacs.PortMapping{
+					{
 						HostPort:      intptr(800),
 						ContainerPort: intptr(900),
 						Protocol:      strptr("udp"),
 					},
 				},
 				VolumesFrom: []*ecsacs.VolumeFrom{
-					&ecsacs.VolumeFrom{
+					{
 						ReadOnly:        boolptr(true),
 						SourceContainer: strptr("volumeLink"),
 					},
@@ -648,7 +648,7 @@ func TestTaskFromACS(t *testing.T) {
 			},
 		},
 		Volumes: []*ecsacs.Volume{
-			&ecsacs.Volume{
+			{
 				Name: strptr("volName"),
 				Host: &ecsacs.HostVolumeProperties{
 					SourcePath: strptr("/host/path"),
@@ -670,7 +670,7 @@ func TestTaskFromACS(t *testing.T) {
 		Family:              "myFamily",
 		Version:             "1",
 		Containers: []*Container{
-			&Container{
+			{
 				Name:        "myName",
 				Image:       "image:tag",
 				Command:     []string{"command", "command2"},
@@ -681,7 +681,7 @@ func TestTaskFromACS(t *testing.T) {
 				CPU:         10,
 				Memory:      100,
 				MountPoints: []MountPoint{
-					MountPoint{
+					{
 						ContainerPath: "/container/path",
 						ReadOnly:      true,
 						SourceVolume:  "sourceVolume",
@@ -691,14 +691,14 @@ func TestTaskFromACS(t *testing.T) {
 					Command: &[]string{"a", "b", "c"},
 				},
 				Ports: []PortBinding{
-					PortBinding{
+					{
 						HostPort:      800,
 						ContainerPort: 900,
 						Protocol:      TransportProtocolUDP,
 					},
 				},
 				VolumesFrom: []VolumeFrom{
-					VolumeFrom{
+					{
 						ReadOnly:        true,
 						SourceContainer: "volumeLink",
 					},
@@ -711,7 +711,7 @@ func TestTaskFromACS(t *testing.T) {
 			},
 		},
 		Volumes: []TaskVolume{
-			TaskVolume{
+			{
 				Name: "volName",
 				Volume: &FSHostVolume{
 					FSSourcePath: "/host/path",
@@ -744,14 +744,14 @@ func TestTaskUpdateKnownStatusHappyPath(t *testing.T) {
 	testTask := &Task{
 		KnownStatusUnsafe: TaskStatusNone,
 		Containers: []*Container{
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerCreated,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerStopped,
 				Essential:         true,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerRunning,
 			},
 		},
@@ -768,15 +768,15 @@ func TestTaskUpdateKnownStatusNotChangeToRunningWithEssentialContainerStopped(t 
 	testTask := &Task{
 		KnownStatusUnsafe: TaskCreated,
 		Containers: []*Container{
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerRunning,
 				Essential:         true,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerStopped,
 				Essential:         true,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerRunning,
 			},
 		},
@@ -793,15 +793,15 @@ func TestTaskUpdateKnownStatusToPendingWithEssentialContainerStopped(t *testing.
 	testTask := &Task{
 		KnownStatusUnsafe: TaskStatusNone,
 		Containers: []*Container{
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerCreated,
 				Essential:         true,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerStopped,
 				Essential:         true,
 			},
-			&Container{
+			{
 				KnownStatusUnsafe: ContainerCreated,
 			},
 		},
