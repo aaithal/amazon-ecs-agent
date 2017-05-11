@@ -309,24 +309,39 @@ func (mtask *managedTask) handleContainerChange(containerChange dockerContainerC
 	}
 }
 
-func (mtask *managedTask) handleStoppedToSteadyStateContainerTransition(eventStatus api.ContainerStatus, containerKnownStatus api.ContainerStatus, container *api.Container) {
-	llog := log.New("task", mtask.Task)
+// handleStoppedToSteadyStateContainerTransition handles container transitions
+// to RUNNING or RESOURCES_PROVISIONED when the container is known to be
+// TERMINAL. Because of start timeouts or missing/out-of-order container
+// "start" events, we might get "start" events for containers that we have
+// already marked as STOPPED.
+// This method stops such containers once
+func (mtask *managedTask) handleStoppedToSteadyStateContainerTransition(
+	eventStatus api.ContainerStatus,
+	containerKnownStatus api.ContainerStatus,
+	container *api.Container) {
 	if containerKnownStatus != api.ContainerStopped {
+		// No need to handle a non STOPPED container here
 		return
 	}
-
-	if eventStatus <= api.ContainerStopped && container.IsKnownSteadyState() {
-		// If the container becomes running after we've stopped it (possibly
-		// because we got an error running it and it ran anyways), the first time
-		// update it to 'known running' so that it will be driven back to stopped
-		mtask.unexpectedStart.Do(func() {
-			llog.Warn("Container that we thought was stopped came back; re-stopping it once")
-			go mtask.engine.transitionContainer(mtask.Task, container, api.ContainerStopped)
-			// Because status (of the event) <= STOPPED (steady state is always
-			// <= STOPPED), it should also cause handleContainerChange to not
-			// proceed
-		})
+	if eventStatus > containerKnownStatus {
+		// No need to handle a forward transition here
+		return
 	}
+	if !eventStatus.IsRunning() {
+		// No need to stop the container for non RUNNING & RESOURCES_PROVISIONED
+		// events
+		return
+	}
+	// If the container becomes running after we've stopped it (possibly
+	// because we got an error running it and it ran anyways), the first time
+	// update it to 'known running' so that it will be driven back to stopped
+	mtask.unexpectedStart.Do(func() {
+		seelog.Warnf(
+			"Container that we thought was stopped came back as '%s'; re-stopping it once for task: [%s]",
+			eventStatus.String(), mtask.Task.String())
+		go mtask.engine.transitionContainer(mtask.Task, container, api.ContainerStopped)
+		// This will not proceed afterwards because status <= knownstatus below
+	})
 }
 
 func (mtask *managedTask) steadyState() bool {
@@ -383,7 +398,7 @@ func (mtask *managedTask) containerNextState(container *api.Container) (api.Cont
 		nextState = api.ContainerStopped
 		// It's not enough to just check if container is in steady state here
 		// we should really check if >= RUNNING <= STOPPED
-		if !container.NeedsToBeStopped() {
+		if !container.IsRunning() {
 			// If it's not currently running we do not need to do anything to make it become stopped.
 			return nextState, false, true
 		}

@@ -107,3 +107,8 @@ func (cs *ContainerStatus) BackendStatus(steadyStateStatus ContainerStatus) Cont
 func (cs ContainerStatus) Terminal() bool {
 	return cs == ContainerStopped
 }
+
+// IsRunning returns trie if the container status is either RUNNING or RESOURCES_PROVISIONED
+func (cs ContainerStatus) IsRunning() bool {
+	return cs == ContainerRunning || cs == ContainerResourcesProvisioned
+}

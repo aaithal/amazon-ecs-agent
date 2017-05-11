@@ -25,6 +25,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/engine/testdata"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
+	"github.com/aws/amazon-ecs-agent/agent/statemanager/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime/mocks"
 	"github.com/stretchr/testify/assert"
 
@@ -457,7 +458,98 @@ func TestOnContainersUnableToTransitionStateForDesiredRunningTask(t *testing.T) 
 }
 
 // TODO: Test progressContainers workflow
-// TODO: Test handleStoppedToRunningContainerTransition
+
+func TestHandleStoppedToSteadyStateTransition(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockStateManager := mock_statemanager.NewMockStateManager(ctrl)
+	defer ctrl.Finish()
+
+	taskEngine := &DockerTaskEngine{
+		saver: mockStateManager,
+	}
+	firstContainerName := "container1"
+	firstContainer := &api.Container{
+		KnownStatusUnsafe: api.ContainerStopped,
+		Name:              firstContainerName,
+	}
+	secondContainerName := "container2"
+	secondContainer := &api.Container{
+		KnownStatusUnsafe:   api.ContainerRunning,
+		DesiredStatusUnsafe: api.ContainerRunning,
+		Name:                secondContainerName,
+	}
+	mTask := &managedTask{
+		Task: &api.Task{
+			Containers: []*api.Container{
+				firstContainer,
+				secondContainer,
+			},
+			Arn: "task1",
+		},
+		engine:         taskEngine,
+		acsMessages:    make(chan acsTransition),
+		dockerMessages: make(chan dockerContainerChange),
+	}
+	taskEngine.managedTasks = make(map[string]*managedTask)
+	taskEngine.managedTasks["task1"] = mTask
+
+	var waitForTransitionFunctionInvocation sync.WaitGroup
+	waitForTransitionFunctionInvocation.Add(1)
+	transitionFunction := func(task *api.Task, container *api.Container) DockerContainerMetadata {
+		assert.Equal(t, firstContainerName, container.Name,
+			"Mismatch in container reference in transition function")
+		waitForTransitionFunctionInvocation.Done()
+		return DockerContainerMetadata{}
+	}
+
+	taskEngine.containerStatusToTransitionFunction = map[api.ContainerStatus]transitionApplyFunc{
+		api.ContainerStopped: transitionFunction,
+	}
+
+	// Recieved RUNNING event, known status is not STOPPED, expect this to
+	// be a noop. Assertions in transitionFunction asserts that as well
+	mTask.handleStoppedToSteadyStateContainerTransition(
+		api.ContainerRunning, api.ContainerRunning, secondContainer)
+
+	// Start building preconditions and assertions for STOPPED -> RUNNING
+	// transition that will be triggered by next invocation of
+	// handleStoppedToSteadyStateContainerTransition
+
+	// We expect state manager Save to be invoked on container transition
+	// for the next transition
+	mockStateManager.EXPECT().Save()
+	// This wait group ensures that a docker message is generated as a
+	// result of the transition function
+	var waitForDockerMessageAssertions sync.WaitGroup
+	waitForDockerMessageAssertions.Add(1)
+	go func() {
+		dockerMessage := <-mTask.dockerMessages
+		assert.Equal(t, api.ContainerStopped, dockerMessage.event.Status,
+			"Mismatch in event status")
+		assert.Equal(t, firstContainerName, dockerMessage.container.Name,
+			"Mismatch in container reference in event")
+		waitForDockerMessageAssertions.Done()
+	}()
+	// Recieved RUNNING, known status is STOPPED, expect this to invoke
+	// transition function once
+	mTask.handleStoppedToSteadyStateContainerTransition(
+		api.ContainerRunning, api.ContainerStopped, firstContainer)
+
+	// Wait for wait groups to be done
+	waitForTransitionFunctionInvocation.Wait()
+	waitForDockerMessageAssertions.Wait()
+
+	// We now have an empty transition function map. Any further transitions
+	// should be noops
+	delete(taskEngine.containerStatusToTransitionFunction, api.ContainerStopped)
+	// Simulate getting RUNNING event for a STOPPED container 10 times.
+	// All of these should be noops. 10 is chosen arbitrarily. Any number > 0
+	// should be fine here
+	for i := 0; i < 10; i++ {
+		mTask.handleStoppedToSteadyStateContainerTransition(
+			api.ContainerRunning, api.ContainerStopped, firstContainer)
+	}
+}
 
 func TestCleanupTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
