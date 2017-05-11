@@ -288,3 +288,13 @@ func (c *Container) GetNextKnownStateProgression() ContainerStatus {
 
 	return c.GetKnownStatus() + 1
 }
+
+// NeedsToBeStopped returns true if the container's known status is either RUNNING
+// or RESOURCES_PROVISIONED. It returns false otherwise
+func (c *Container) NeedsToBeStopped() bool {
+	knownStatus := c.GetKnownStatus()
+	if knownStatus == ContainerRunning || knownStatus == ContainerResourcesProvisioned {
+		return true
+	}
+	return false
+}

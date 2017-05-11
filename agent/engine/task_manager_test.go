@@ -43,6 +43,9 @@ func TestContainerNextState(t *testing.T) {
 		// NONE -> RUNNING transition is allowed and actionable, when desired is Running
 		// The exptected next status is Pulled
 		{api.ContainerStatusNone, api.ContainerRunning, api.ContainerPulled, true, true},
+		// NONE -> RESOURCES_PROVISIONED transition is allowed and actionable, when desired
+		// is Running. The exptected next status is Pulled
+		{api.ContainerStatusNone, api.ContainerResourcesProvisioned, api.ContainerPulled, true, true},
 		// NONE -> NONE transition is not be allowed and is not actionable,
 		// when desired is Running
 		{api.ContainerStatusNone, api.ContainerStatusNone, api.ContainerStatusNone, false, false},
@@ -52,6 +55,9 @@ func TestContainerNextState(t *testing.T) {
 		// PULLED -> RUNNING transition is allowed and actionable, when desired is Running
 		// The exptected next status is Created
 		{api.ContainerPulled, api.ContainerRunning, api.ContainerCreated, true, true},
+		// PULLED -> RESOURCES_PROVISIONED transition is allowed and actionable, when desired
+		// is Running. The exptected next status is Created
+		{api.ContainerPulled, api.ContainerResourcesProvisioned, api.ContainerCreated, true, true},
 		// PULLED -> PULLED transition is not allowed and not actionable,
 		// when desired is Running
 		{api.ContainerPulled, api.ContainerPulled, api.ContainerStatusNone, false, false},
@@ -64,6 +70,9 @@ func TestContainerNextState(t *testing.T) {
 		// CREATED -> RUNNING transition is allowed and actionable, when desired is Running
 		// The exptected next status is Running
 		{api.ContainerCreated, api.ContainerRunning, api.ContainerRunning, true, true},
+		// CREATED -> RESOURCES_PROVISIONED transition is allowed and actionable, when desired
+		// is Running. The exptected next status is Running
+		{api.ContainerCreated, api.ContainerResourcesProvisioned, api.ContainerRunning, true, true},
 		// CREATED -> CREATED transition is not allowed and not actionable,
 		// when desired is Running
 		{api.ContainerCreated, api.ContainerCreated, api.ContainerStatusNone, false, false},
@@ -82,6 +91,9 @@ func TestContainerNextState(t *testing.T) {
 		// RUNNING -> RUNNING transition is not allowed and not actionable,
 		// when desired is Running
 		{api.ContainerRunning, api.ContainerRunning, api.ContainerStatusNone, false, false},
+		// RUNNING -> RESOURCES_PROVISIONED is allowed when steady state status is
+		// RESOURCES_PROVISIONED and desired is RESOURCES_PROVISIONED
+		{api.ContainerRunning, api.ContainerResourcesProvisioned, api.ContainerResourcesProvisioned, true, true},
 		// RUNNING -> NONE transition is not allowed and not actionable,
 		// when desired is Running
 		{api.ContainerRunning, api.ContainerStatusNone, api.ContainerStatusNone, false, false},
@@ -91,78 +103,128 @@ func TestContainerNextState(t *testing.T) {
 		// RUNNING -> CREATED transition is not allowed and not actionable,
 		// when desired is Running
 		{api.ContainerRunning, api.ContainerCreated, api.ContainerStatusNone, false, false},
+
+		// RESOURCES_PROVISIONED -> RESOURCES_PROVISIONED transition is not allowed and not actionable,
+		// when desired is Running
+		{api.ContainerResourcesProvisioned, api.ContainerResourcesProvisioned, api.ContainerStatusNone, false, false},
+		// RESOURCES_PROVISIONED -> RUNNING transition is not allowed and not actionable,
+		// when desired is Running
+		{api.ContainerResourcesProvisioned, api.ContainerRunning, api.ContainerStatusNone, false, false},
+		// RESOURCES_PROVISIONED -> STOPPED transition is allowed and actionable, when desired
+		// is Running. The exptected next status is STOPPED
+		{api.ContainerResourcesProvisioned, api.ContainerStopped, api.ContainerStopped, true, true},
+		// RESOURCES_PROVISIONED -> NONE transition is not allowed and not actionable,
+		// when desired is Running
+		{api.ContainerResourcesProvisioned, api.ContainerStatusNone, api.ContainerStatusNone, false, false},
+		// RESOURCES_PROVISIONED -> PULLED transition is not allowed and not actionable,
+		// when desired is Running
+		{api.ContainerResourcesProvisioned, api.ContainerPulled, api.ContainerStatusNone, false, false},
+		// RESOURCES_PROVISIONED -> CREATED transition is not allowed and not actionable,
+		// when desired is Running
+		{api.ContainerResourcesProvisioned, api.ContainerCreated, api.ContainerStatusNone, false, false},
 	}
 
+	steadyStates := []api.ContainerStatus{api.ContainerRunning, api.ContainerResourcesProvisioned}
+
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%s to %s Transition",
-			tc.containerCurrentStatus.String(), tc.containerDesiredStatus.String()), func(t *testing.T) {
-			container := &api.Container{
-				DesiredStatusUnsafe: tc.containerDesiredStatus,
-				KnownStatusUnsafe:   tc.containerCurrentStatus,
-			}
-			task := &managedTask{
-				Task: &api.Task{
-					Containers: []*api.Container{
-						container,
+		for _, steadyState := range steadyStates {
+			t.Run(fmt.Sprintf("%s to %s Transition with Steady State %s",
+				tc.containerCurrentStatus.String(), tc.containerDesiredStatus.String(), steadyState.String()), func(t *testing.T) {
+				if tc.containerDesiredStatus == api.ContainerResourcesProvisioned &&
+					steadyState < tc.containerDesiredStatus {
+					t.Skipf("Skipping because of unassumable steady state [%s] and desired state [%s]",
+						steadyState.String(), tc.containerDesiredStatus.String())
+				}
+				container := api.NewContainerWithSteadyState(steadyState)
+				container.DesiredStatusUnsafe = tc.containerDesiredStatus
+				container.KnownStatusUnsafe = tc.containerCurrentStatus
+				task := &managedTask{
+					Task: &api.Task{
+						Containers: []*api.Container{
+							container,
+						},
+						DesiredStatusUnsafe: api.TaskRunning,
 					},
-					DesiredStatusUnsafe: api.TaskRunning,
-				},
-			}
-			nextStatus, actionRequired, possible := task.containerNextState(container)
-			assert.Equal(t, tc.expectedContainerStatus, nextStatus,
-				"Expected next state [%s] != Retrieved next state [%s]",
-				tc.expectedContainerStatus.String(), nextStatus.String())
-			assert.Equal(t, tc.expectedTransitionActionable, actionRequired)
-			assert.Equal(t, tc.expectedTransitionPossible, possible)
-		})
+				}
+				nextStatus, actionRequired, possible := task.containerNextState(container)
+				t.Logf("%s %v %v", nextStatus, actionRequired, possible)
+				assert.Equal(t, tc.expectedContainerStatus, nextStatus, "Mismatch for expected next state")
+				assert.Equal(t, tc.expectedTransitionActionable, actionRequired, "Mismatch for expected actionable flag")
+				assert.Equal(t, tc.expectedTransitionPossible, possible, "Mismatch for expected action possible")
+			})
+		}
 	}
 }
 
 func TestStartContainerTransitionsWhenForwardTransitionPossible(t *testing.T) {
-	firstContainerName := "container1"
-	firstContainer := &api.Container{
-		KnownStatusUnsafe:   api.ContainerCreated,
-		DesiredStatusUnsafe: api.ContainerRunning,
-		Name:                firstContainerName,
-	}
-	secondContainerName := "container2"
-	secondContainer := &api.Container{
-		KnownStatusUnsafe:   api.ContainerPulled,
-		DesiredStatusUnsafe: api.ContainerRunning,
-		Name:                secondContainerName,
-	}
-	task := &managedTask{
-		Task: &api.Task{
-			Containers: []*api.Container{
-				firstContainer,
-				secondContainer,
-			},
-			DesiredStatusUnsafe: api.TaskRunning,
-		},
-		engine: &DockerTaskEngine{},
-	}
+	steadyStates := []api.ContainerStatus{api.ContainerRunning, api.ContainerResourcesProvisioned}
+	for _, steadyState := range steadyStates {
+		t.Run(fmt.Sprintf("Steady State is %s", steadyState.String()), func(t *testing.T) {
+			firstContainerName := "container1"
+			firstContainer := api.NewContainerWithSteadyState(steadyState)
+			firstContainer.KnownStatusUnsafe = api.ContainerCreated
+			firstContainer.DesiredStatusUnsafe = api.ContainerRunning
+			firstContainer.Name = firstContainerName
 
-	waitForAssertions := sync.WaitGroup{}
-	waitForAssertions.Add(2)
-	canTransition, transitions := task.startContainerTransitions(
-		func(cont *api.Container, nextStatus api.ContainerStatus) {
-			if cont.Name == firstContainerName {
-				assert.Equal(t, nextStatus, api.ContainerRunning)
-			} else if cont.Name == secondContainerName {
-				assert.Equal(t, nextStatus, api.ContainerCreated)
+			secondContainerName := "container2"
+			secondContainer := api.NewContainerWithSteadyState(steadyState)
+			secondContainer.KnownStatusUnsafe = api.ContainerPulled
+			secondContainer.DesiredStatusUnsafe = api.ContainerRunning
+			secondContainer.Name = secondContainerName
+
+			task := &managedTask{
+				Task: &api.Task{
+					Containers: []*api.Container{
+						firstContainer,
+						secondContainer,
+					},
+					DesiredStatusUnsafe: api.TaskRunning,
+				},
+				engine: &DockerTaskEngine{},
 			}
-			waitForAssertions.Done()
+
+			pauseContainerName := "pause"
+			waitForAssertions := sync.WaitGroup{}
+			if steadyState == api.ContainerResourcesProvisioned {
+				pauseContainer := api.NewContainerWithSteadyState(steadyState)
+				pauseContainer.KnownStatusUnsafe = api.ContainerRunning
+				pauseContainer.DesiredStatusUnsafe = api.ContainerResourcesProvisioned
+				pauseContainer.Name = pauseContainerName
+				task.Containers = append(task.Containers, pauseContainer)
+				waitForAssertions.Add(1)
+			}
+
+			waitForAssertions.Add(2)
+			canTransition, transitions := task.startContainerTransitions(
+				func(cont *api.Container, nextStatus api.ContainerStatus) {
+					if cont.Name == firstContainerName {
+						assert.Equal(t, nextStatus, api.ContainerRunning, "Mismatch for first container next status")
+					} else if cont.Name == secondContainerName {
+						assert.Equal(t, nextStatus, api.ContainerCreated, "Mismatch for second container next status")
+					} else if cont.Name == pauseContainerName {
+						assert.Equal(t, nextStatus, api.ContainerResourcesProvisioned, "Mismatch for pause container next status")
+					}
+					waitForAssertions.Done()
+				})
+			waitForAssertions.Wait()
+			assert.True(t, canTransition, "Mismatch for canTransition")
+			assert.NotEmpty(t, transitions)
+			if steadyState == api.ContainerResourcesProvisioned {
+				assert.Len(t, transitions, 3)
+				pauseContainerTransition, ok := transitions[pauseContainerName]
+				assert.True(t, ok, "Expected pause container transition to be in the transitions map")
+				assert.Equal(t, pauseContainerTransition, api.ContainerResourcesProvisioned, "Mismatch for pause container transition state")
+			} else {
+				assert.Len(t, transitions, 2)
+			}
+			firstContainerTransition, ok := transitions[firstContainerName]
+			assert.True(t, ok, "Expected first container transition to be in the transitions map")
+			assert.Equal(t, firstContainerTransition, api.ContainerRunning, "Mismatch for first container transition state")
+			secondContainerTransition, ok := transitions[secondContainerName]
+			assert.True(t, ok, "Expected second container transition to be in the transitions map")
+			assert.Equal(t, secondContainerTransition, api.ContainerCreated, "Mismatch for second container transition state")
 		})
-	waitForAssertions.Wait()
-	assert.True(t, canTransition)
-	assert.NotEmpty(t, transitions)
-	assert.Len(t, transitions, 2)
-	firstContainerTransition, ok := transitions[firstContainerName]
-	assert.True(t, ok)
-	assert.Equal(t, firstContainerTransition, api.ContainerRunning)
-	secondContainerTransition, ok := transitions[secondContainerName]
-	assert.True(t, ok)
-	assert.Equal(t, secondContainerTransition, api.ContainerCreated)
+	}
 }
 
 func TestStartContainerTransitionsWhenForwardTransitionIsNotPossible(t *testing.T) {
@@ -178,11 +240,17 @@ func TestStartContainerTransitionsWhenForwardTransitionIsNotPossible(t *testing.
 		DesiredStatusUnsafe: api.ContainerRunning,
 		Name:                secondContainerName,
 	}
+	pauseContainerName := "pause"
+	pauseContainer := api.NewContainerWithSteadyState(api.ContainerResourcesProvisioned)
+	pauseContainer.KnownStatusUnsafe = api.ContainerResourcesProvisioned
+	pauseContainer.DesiredStatusUnsafe = api.ContainerResourcesProvisioned
+	pauseContainer.Name = pauseContainerName
 	task := &managedTask{
 		Task: &api.Task{
 			Containers: []*api.Container{
 				firstContainer,
 				secondContainer,
+				pauseContainer,
 			},
 			DesiredStatusUnsafe: api.TaskRunning,
 		},
