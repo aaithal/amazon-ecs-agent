@@ -32,6 +32,15 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/eni/udevwrapper"
 )
 
+const (
+	// linkTypeDevice defines the network device type for physical
+	// network interfaces
+	linkTypeDevice = "device"
+	// encapTypeLoopback defines the encapsulation type for the
+	// loopback device
+	encapTypeLoopback = "loopback"
+)
+
 // UdevWatcher maintains the state of attached ENIs
 // to the instance. It also has supporting elements to
 // maintain consistency and update intervals
@@ -77,8 +86,27 @@ func (udevWatcher *UdevWatcher) Init() error {
 	}
 
 	// Pass state to Init
-	udevWatcher.state.Init(links)
+	udevWatcher.state.Init(filterLinks(links))
 	return nil
+}
+
+// filterLinks returns a list of links that Agent cares about from a
+// specified list of links. Agent only cares about links that are of
+// type "device". Devices that have their encapsulation type set to
+// "loopback" are also filtered out.
+func filterLinks(links []netlink.Link) []netlink.Link {
+	var filteredLinks []netlink.Link
+	for _, link := range links {
+		if link.Type() != linkTypeDevice {
+			continue
+		}
+		if link.Attrs().EncapType == encapTypeLoopback {
+			continue
+		}
+		filteredLinks = append(filteredLinks, link)
+	}
+
+	return filteredLinks
 }
 
 // Start periodically updates the state of ENIs connected to the system
@@ -123,7 +151,7 @@ func (udevWatcher *UdevWatcher) reconcileOnce() {
 		return
 	}
 
-	currentState := udevWatcher.buildState(links)
+	currentState := udevWatcher.buildState(filterLinks(links))
 
 	// NOTE: For correct semantics, this entire function needs to be locked.
 	// As we postulate the netlinkClient.LinkList() call to be expensive, we allow

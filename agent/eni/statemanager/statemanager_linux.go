@@ -16,11 +16,19 @@
 package statemanager
 
 import (
+	"time"
+
 	"github.com/aws/amazon-ecs-agent/agent/api"
+	"github.com/aws/amazon-ecs-agent/agent/async"
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/statechange"
 	log "github.com/cihub/seelog"
 	"github.com/vishvananda/netlink"
+)
+
+const (
+	maxUnmanagedDevicesInCache = 10
+	unmanagedDevicesCacheTTL   = time.Hour
 )
 
 // StateManager defines the method to manage the state of eni
@@ -32,15 +40,17 @@ type StateManager interface {
 
 // stateManager handles the state change of eni
 type stateManager struct {
-	agentState     dockerstate.TaskEngineState
-	eniChangeEvent chan statechange.Event
+	agentState       dockerstate.TaskEngineState
+	eniChangeEvent   chan statechange.Event
+	unamangedDevices async.Cache
 }
 
 // New returns a new StateManager
 func New(state dockerstate.TaskEngineState, event chan statechange.Event) StateManager {
 	return &stateManager{
-		agentState:     state,
-		eniChangeEvent: event,
+		agentState:       state,
+		eniChangeEvent:   event,
+		unamangedDevices: async.NewLRUCache(maxUnmanagedDevicesInCache, unmanagedDevicesCacheTTL),
 	}
 }
 
@@ -62,7 +72,10 @@ func (statemanager *stateManager) ENIStateChangeShouldBeSent(macAddress string) 
 	// check if this is an eni required by a task
 	eni, ok := statemanager.agentState.ENIByMac(macAddress)
 	if !ok {
-		log.Infof("ENI state manager: eni not managed by ecs: %s", macAddress)
+		if _, found := statemanager.unamangedDevices.Get(macAddress); !found {
+			log.Infof("ENI state manager: device not managed by ecs: %s", macAddress)
+			statemanager.unamangedDevices.Set(macAddress, struct{}{})
+		}
 		return nil, false
 	}
 
