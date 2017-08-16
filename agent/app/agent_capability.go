@@ -115,7 +115,7 @@ func (agent *ecsAgent) capabilities() []*ecs.Attribute {
 		// Task ENI in the Agent have already been validated prior to the invocation of
 		// the `agent.capabilities()` call
 		capabilities = append(capabilities, &ecs.Attribute{
-			Name: aws.String(attributePrefix + taskENIAttributeSuffix),
+			Name: aws.String("com.amazonaws.ecs.capability." + taskENIAttributeSuffix),
 		})
 		taskENIVersionAttribute, err := agent.getTaskENIPluginVersionAttribute()
 		if err != nil {

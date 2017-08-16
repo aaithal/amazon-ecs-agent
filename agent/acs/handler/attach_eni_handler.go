@@ -65,8 +65,11 @@ func newAttachENIHandler(ctx context.Context,
 
 // handlerFunc returns a function to enqueue requests onto attachENIHandler buffer
 func (attachENIHandler *attachENIHandler) handlerFunc() func(message *ecsacs.AttachTaskNetworkInterfacesMessage) {
+	seelog.Infof("AttachENIHandler: handlerFunc")
 	return func(message *ecsacs.AttachTaskNetworkInterfacesMessage) {
+		seelog.Infof("AttachENIHandler: handlerFunc messageBuffer <- message ++")
 		attachENIHandler.messageBuffer <- message
+		seelog.Infof("AttachENIHandler: handlerFunc messageBuffer <- message --")
 	}
 }
 
@@ -82,10 +85,13 @@ func (attachENIHandler *attachENIHandler) stop() {
 
 // handleMessages handles each message one at a time
 func (attachENIHandler *attachENIHandler) handleMessages() {
+	seelog.Infof("AttachENIHandler: handleMessages")
 	for {
 		select {
 		case message := <-attachENIHandler.messageBuffer:
-			attachENIHandler.handleSingleMessage(message)
+			if err := attachENIHandler.handleSingleMessage(message); err != nil {
+				seelog.Warnf("Unable to handle attach eni message: %v; %s", err, message.String())
+			}
 		case <-attachENIHandler.ctx.Done():
 			return
 		}
@@ -95,6 +101,7 @@ func (attachENIHandler *attachENIHandler) handleMessages() {
 // handleSingleMessage acks the message received
 // TODO: Send response to validate ENI attachment
 func (attachENIHandler *attachENIHandler) handleSingleMessage(message *ecsacs.AttachTaskNetworkInterfacesMessage) error {
+	seelog.Infof("AttachENIHandler: handleSingleMessage ++")
 	// Validate fields in the message
 	err := validateAttachTaskNetworkInterfacesMessage(message)
 	if err != nil {
@@ -110,6 +117,7 @@ func (attachENIHandler *attachENIHandler) handleSingleMessage(message *ecsacs.At
 		seelog.Warnf("Failed to ack request with messageId: %s, error: %v", aws.StringValue(message.MessageId), err)
 	}
 
+	seelog.Infof("AttachENIHandler: handleSingleMessage ack sent")
 	// Check if this is a duplicate message
 	eniMac := aws.StringValue(message.ElasticNetworkInterfaces[0].MacAddress)
 	if _, ok := attachENIHandler.state.ENIByMac(eniMac); ok {
@@ -117,11 +125,14 @@ func (attachENIHandler *attachENIHandler) handleSingleMessage(message *ecsacs.At
 		return nil
 	}
 
+	seelog.Infof("AttachENIHandler: handleSingleMessage updating state")
 	attachENIHandler.addENIAttachmentToState(message)
+	seelog.Infof("AttachENIHandler: handleSingleMessage saving state")
 	err = attachENIHandler.saver.Save()
 	if err != nil {
 		return errors.Wrapf(err, "attach eni message handler: error save agent state")
 	}
+	seelog.Infof("AttachENIHandler: handleSingleMessage --")
 	return nil
 }
 
@@ -130,11 +141,12 @@ func (handler *attachENIHandler) addENIAttachmentToState(message *ecsacs.AttachT
 	attachmentArn := aws.StringValue(message.ElasticNetworkInterfaces[0].AttachmentArn)
 	eniMac := aws.StringValue(message.ElasticNetworkInterfaces[0].MacAddress)
 	// Stop tracking the eni attachment after timeout
-	eniAckTimeout := time.Duration(aws.Int64Value(message.WaitTimeoutMs)) * time.Millisecond
+	// eniAckTimeout := time.Duration(aws.Int64Value(message.WaitTimeoutMs)) * time.Millisecond
+	eniAckTimeout := time.Duration(time.Minute)
 	eniAckTimeoutHandler := ackTimeoutHandler{mac: eniMac, state: handler.state}
 	ackTimeoutTimer := time.AfterFunc(eniAckTimeout, eniAckTimeoutHandler.handle)
 
-	seelog.Info("Adding eni info to state, eni: %s", attachmentArn)
+	seelog.Infof("Adding eni info to state, eni: %s", attachmentArn)
 	eniAttachment := &api.ENIAttachment{
 		TaskArn:          aws.StringValue(message.TaskArn),
 		AttachmentArn:    attachmentArn,
@@ -200,11 +212,12 @@ func validateAttachTaskNetworkInterfacesMessage(message *ecsacs.AttachTaskNetwor
 		return errors.Errorf("attach eni handler validation: taskArn not set in AttachTaskNetworkInterface message received from ECS")
 	}
 
-	timeout := aws.Int64Value(message.WaitTimeoutMs)
-	if timeout <= 0 {
-		return errors.Errorf("attach eni handler validation: invalid timeout listed in AttachTaskNetworkInterface message received from ECS")
+	/*
+		timeout := aws.Int64Value(message.WaitTimeoutMs)
+		if timeout <= 0 {
+			return errors.Errorf("attach eni handler validation: invalid timeout listed in AttachTaskNetworkInterface message received from ECS")
 
-	}
-
+		}
+	*/
 	return nil
 }

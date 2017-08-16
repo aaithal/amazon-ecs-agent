@@ -14,8 +14,9 @@
 package eventhandler
 
 import (
-	"github.com/aws/amazon-ecs-agent/agent/api"
 	"sync"
+
+	"github.com/aws/amazon-ecs-agent/agent/api"
 )
 
 // a state change that may have a container and, optionally, a task event to
@@ -74,6 +75,9 @@ func (event *sendableEvent) taskShouldBeSent() bool {
 		return false
 	}
 	tevent := event.taskChange
+	if tevent.Attachments != nil {
+		return !tevent.Attachments.IsSent()
+	}
 	if tevent.Status == api.TaskStatusNone {
 		return false // defensive programming :)
 	}

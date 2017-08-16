@@ -35,7 +35,7 @@ type ENIAttachment struct {
 	// Status is the status of the eni: none/attached/detached
 	Status         ENIAttachmentStatus `json:"status"`
 	sentStatusLock sync.RWMutex
-	AckTimer       ttime.Timer
+	AckTimer       ttime.Timer `json:"-"`
 }
 
 // ENI contains information of the eni
