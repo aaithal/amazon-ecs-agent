@@ -264,7 +264,7 @@ func (agent *ecsAgent) doStart(containerChangeEventStream *eventstream.EventStre
 	deregisterInstanceEventStream.StartListening()
 	taskHandler := eventhandler.NewTaskHandler(agent.ctx, stateManager, state, client)
 	agent.startAsyncRoutines(containerChangeEventStream, credentialsManager, imageManager,
-		taskEngine, stateManager, deregisterInstanceEventStream, client, taskHandler)
+		taskEngine, stateManager, deregisterInstanceEventStream, client, taskHandler, state)
 
 	// Start the acs session, which should block doStart
 	return agent.startACSSession(credentialsManager, taskEngine, stateManager,
@@ -473,7 +473,8 @@ func (agent *ecsAgent) startAsyncRoutines(
 	stateManager statemanager.StateManager,
 	deregisterInstanceEventStream *eventstream.EventStream,
 	client api.ECSClient,
-	taskHandler *eventhandler.TaskHandler) {
+	taskHandler *eventhandler.TaskHandler,
+	state dockerstate.TaskEngineState) {
 
 	// Start of the periodic image cleanup process
 	if !agent.cfg.ImageCleanupDisabled {
@@ -486,7 +487,7 @@ func (agent *ecsAgent) startAsyncRoutines(
 	go handlers.ServeHttp(&agent.containerInstanceARN, taskEngine, agent.cfg)
 
 	// Start serving the endpoint to fetch IAM Role credentials
-	go credentialshandler.ServeHTTP(credentialsManager, agent.containerInstanceARN, agent.cfg)
+	go credentialshandler.ServeHTTP(credentialsManager, agent.containerInstanceARN, agent.cfg, state)
 
 	// Start sending events to the backend
 	go eventhandler.HandleEngineEvents(taskEngine, client, taskHandler)

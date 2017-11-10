@@ -15,12 +15,14 @@ package handlers
 
 import "github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 
+// MetadataResponse is the schema for the metadata response JSON object
 type MetadataResponse struct {
 	Cluster              string
 	ContainerInstanceArn *string
 	Version              string
 }
 
+// TaskResponse is the schema for the task response JSON object
 type TaskResponse struct {
 	Arn           string
 	DesiredStatus string `json:",omitempty"`
@@ -30,16 +32,20 @@ type TaskResponse struct {
 	Containers    []ContainerResponse
 }
 
+// TasksResponse is the schema for the tasks response JSON object
 type TasksResponse struct {
 	Tasks []*TaskResponse
 }
 
+// ContainerResponse is the schema for the container response JSON object
 type ContainerResponse struct {
 	DockerId   string
 	DockerName string
 	Name       string
 }
 
+// DockerStateResolver is a sub-interface for the engine.TaskEngine interface
+// to make it easy to test code in this package
 type DockerStateResolver interface {
 	State() dockerstate.TaskEngineState
 }

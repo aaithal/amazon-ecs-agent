@@ -63,6 +63,13 @@ type TaskEngineState interface {
 	Reset()
 	// RemoveImageState removes an image.ImageState
 	RemoveImageState(imageState *image.ImageState)
+
+	//
+	AddTaskIPAddress(addr string, taskARN string)
+
+	//
+	GetTaskByIPAddress(addr string) (string, bool)
+
 	json.Marshaler
 	json.Unmarshaler
 }
@@ -89,6 +96,7 @@ type DockerTaskEngineState struct {
 	idToContainer  map[string]*api.DockerContainer            // DockerId -> api.DockerContainer
 	eniAttachments map[string]*api.ENIAttachment              // ENIMac -> api.ENIAttachment
 	imageStates    map[string]*image.ImageState
+	ipToTask       map[string]string // ip address -> task arn
 }
 
 // NewTaskEngineState returns a new TaskEngineState
@@ -112,6 +120,7 @@ func (state *DockerTaskEngineState) initializeDockerTaskEngineState() {
 	state.idToContainer = make(map[string]*api.DockerContainer)
 	state.imageStates = make(map[string]*image.ImageState)
 	state.eniAttachments = make(map[string]*api.ENIAttachment)
+	state.ipToTask = make(map[string]string)
 }
 
 // Reset resets all the states
@@ -417,4 +426,20 @@ func (state *DockerTaskEngineState) RemoveImageState(imageState *image.ImageStat
 		return
 	}
 	delete(state.imageStates, imageState.Image.ImageID)
+}
+
+//
+func (state *DockerTaskEngineState) AddTaskIPAddress(addr string, taskARN string) {
+	state.lock.Lock()
+	defer state.lock.Unlock()
+
+	state.ipToTask[addr] = taskARN
+}
+
+func (state *DockerTaskEngineState) GetTaskByIPAddress(addr string) (string, bool) {
+	state.lock.RLock()
+	defer state.lock.RUnlock()
+
+	taskARN, ok := state.ipToTask[addr]
+	return taskARN, ok
 }

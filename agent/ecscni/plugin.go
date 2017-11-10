@@ -25,6 +25,7 @@ import (
 	"github.com/cihub/seelog"
 	"github.com/containernetworking/cni/libcni"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +33,7 @@ import (
 type CNIClient interface {
 	Version(string) (string, error)
 	Capabilities(string) ([]string, error)
-	SetupNS(*Config) error
+	SetupNS(*Config) (*current.Result, error)
 	CleanupNS(*Config) error
 	ReleaseIPResource(*Config) error
 }
@@ -61,7 +62,7 @@ func NewClient(cfg *Config) CNIClient {
 
 // SetupNS will set up the namespace of container, including create the bridge
 // and the veth pair, move the eni to container namespace, setup the routes
-func (client *cniClient) SetupNS(cfg *Config) error {
+func (client *cniClient) SetupNS(cfg *Config) (*current.Result, error) {
 	cns := &libcni.RuntimeConf{
 		ContainerID: cfg.ContainerID,
 		NetNS:       fmt.Sprintf(netnsFormat, cfg.ContainerPID),
@@ -70,7 +71,8 @@ func (client *cniClient) SetupNS(cfg *Config) error {
 
 	networkConfigList, err := client.createNetworkConfig(cfg, client.createBridgeNetworkConfigWithIPAM)
 	if err != nil {
-		return errors.Wrap(err, "cni invocation: failed to construct network configuration for configuring namespace")
+		return nil, errors.Wrap(err,
+			"cni invocation: failed to construct network configuration for configuring namespace")
 	}
 
 	seelog.Debugf("Starting setup the ENI (%s) in container namespace: %s", cfg.ENIID, cfg.ContainerID)
@@ -78,11 +80,19 @@ func (client *cniClient) SetupNS(cfg *Config) error {
 	defer os.Unsetenv("ECS_CNI_LOGLEVEL")
 	result, err := client.libcni.AddNetworkList(networkConfigList, cns)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	// 2017-11-03T18:49:44Z [DEBUG] Set up container namespace done: Interfaces:[{Name:ecs-bridge Mac: Sandbox:} {Name:veth4b41ae13 Mac:ae:f1:1b:73:b6:29 Sandbox:} {Name:ecs-eth0 Mac: Sandbox:}], IP:[{Version:4 Interface:2 Address:{IP:169.254.172.6 Mask:fffffc00} Gateway:169.254.172.1}], Routes:[{Dst:{IP:169.254.170.2 Mask:ffffffff} GW:<nil>}], DNS:{Nameservers:[] Domain: Search:[] Options:[]}
 	seelog.Debugf("Set up container namespace done: %s", result.String())
-	return nil
+	var curResult *current.Result
+	if _, err = result.GetAsVersion("0.3.1"); err != nil {
+		seelog.Warnf("Unable to convert result to 0.3.1: %v: %s", err, result.Version())
+		return nil, err
+	}
+	curResult = result.(*current.Result)
+
+	return curResult, nil
 }
 
 // CleanupNS will clean up the container namespace, including remove the veth
@@ -142,7 +152,7 @@ func (client *cniClient) createNetworkConfig(cfg *Config, bridgeConfigFunc func(
 		return nil, err
 	}
 
-	pluginConfigs := []*libcni.NetworkConfig{bridgeConfig, eniConfig}
+	pluginConfigs := []*libcni.NetworkConfig{eniConfig, bridgeConfig}
 	networkConfigList := &libcni.NetworkConfigList{
 		CNIVersion: client.cniVersion,
 		Plugins:    pluginConfigs,

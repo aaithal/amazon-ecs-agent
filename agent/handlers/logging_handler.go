@@ -13,7 +13,11 @@
 
 package handlers
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/cihub/seelog"
+)
 
 type LoggingHandler struct{ h http.Handler }
 
@@ -23,6 +27,6 @@ func NewLoggingHandler(handler http.Handler) LoggingHandler {
 }
 
 func (lh LoggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Info("Handling http request", "method", r.Method, "from", r.RemoteAddr, "uri", r.RequestURI)
+	seelog.Info("Handling http request", "method", r.Method, "from", r.RemoteAddr, "uri", r.RequestURI)
 	lh.h.ServeHTTP(w, r)
 }

@@ -793,7 +793,7 @@ func (engine *DockerTaskEngine) provisionContainerResources(task *api.Task, cont
 		}
 	}
 	// Invoke the libcni to config the network namespace for the container
-	err = engine.cniClient.SetupNS(cniConfig)
+	result, err := engine.cniClient.SetupNS(cniConfig)
 	if err != nil {
 		seelog.Errorf("Set up pause container namespace failed, err: %v, task: %s", err, task.String())
 		return DockerContainerMetadata{
@@ -801,6 +801,10 @@ func (engine *DockerTaskEngine) provisionContainerResources(task *api.Task, cont
 			Error:    ContainerNetworkingError{errors.Wrap(err, "container resource provisioning: failed to setup network namespace")},
 		}
 	}
+
+	seelog.Infof("provisionContainerResources for task '%s'; adding task ip '%s' from %s",
+		task.Arn, result.IPs[0].Address.String(), result.String())
+	engine.state.AddTaskIPAddress(result.IPs[0].Address.IP.String(), task.Arn)
 
 	return DockerContainerMetadata{
 		DockerID: cniConfig.ContainerID,
