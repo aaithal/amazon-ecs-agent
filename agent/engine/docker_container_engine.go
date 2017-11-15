@@ -273,6 +273,10 @@ func wrapPullErrorAsEngineError(err error) engineError {
 
 func (dg *dockerGoClient) pullImage(image string, authData *api.RegistryAuthenticationData) engineError {
 	log.Debug("Pulling image", "image", image)
+	seelog.Infof("Sleeping in pull container for : %s", image)
+	time.Sleep(time.Minute)
+	seelog.Infof("Woke up in pull container for : %s", image)
+
 	client, err := dg.dockerClient()
 	if err != nil {
 		return CannotGetDockerClientError{version: dg.version, err: err}
@@ -493,6 +497,7 @@ func (dg *dockerGoClient) StartContainer(id string, timeout time.Duration) Docke
 	// makes it easier to write tests.
 	// Eventually, the context should be initialized from a parent root context
 	// instead of TODO.
+
 	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 
