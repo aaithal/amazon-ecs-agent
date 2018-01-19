@@ -134,7 +134,7 @@ cni-plugins: get-cni-sources
 	@echo "Built amazon-ecs-cni-plugins successfully."
 
 run-integ-tests: test-registry gremlin
-	. ./scripts/shared_env && go test -race -tags integration -timeout=5m -v ./agent/engine/... ./agent/stats/... ./agent/app/...
+	. ./scripts/shared_env && ECS_LOGLEVEL=debug go test -race -tags integration -timeout=5m -v ./agent/engine/... ./agent/stats/... ./agent/app/...
 
 netkitten:
 	$(MAKE) -C misc/netkitten $(MFLAGS)
