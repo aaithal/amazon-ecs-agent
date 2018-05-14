@@ -35,11 +35,11 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient/wsconn"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/private/protocol/json/jsonutil"
-	"github.com/cihub/seelog"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 )
@@ -124,6 +124,7 @@ type ClientServerImpl struct {
 	// RWTimeout is the duration used for setting read and write deadlines
 	// for the websocket connection
 	RWTimeout time.Duration
+	Logger    *mux.PackageLogger
 	// writeLock needed to ensure that only one routine is writing to the socket
 	writeLock sync.RWMutex
 	ClientServer
@@ -135,7 +136,7 @@ type ClientServerImpl struct {
 // 'MakeRequest' can be made after calling this, but responss will not be
 // receivable until 'Serve' is also called.
 func (cs *ClientServerImpl) Connect() error {
-	seelog.Debugf("Establishing a Websocket connection to %s", cs.URL)
+	cs.Logger.Debugf("Establishing a Websocket connection to %s", cs.URL)
 	parsedURL, err := url.Parse(cs.URL)
 	if err != nil {
 		return err
@@ -167,9 +168,9 @@ func (cs *ClientServerImpl) Connect() error {
 		if err == nil {
 			dockerHost.Scheme = ""
 			os.Setenv("NO_PROXY", fmt.Sprintf("%s,%s", defaultNoProxyIP, dockerHost.String()))
-			seelog.Info("NO_PROXY set:", os.Getenv("NO_PROXY"))
+			cs.Logger.Info("NO_PROXY set:", os.Getenv("NO_PROXY"))
 		} else {
-			seelog.Errorf("NO_PROXY unable to be set: the configured Docker endpoint is invalid.")
+			cs.Logger.Errorf("NO_PROXY unable to be set: the configured Docker endpoint is invalid.")
 		}
 	}
 
@@ -202,7 +203,7 @@ func (cs *ClientServerImpl) Connect() error {
 				return cs.NewError(possibleError)
 			}
 		}
-		seelog.Warnf("Error creating a websocket client: %v", err)
+		cs.Logger.Warnf("Error creating a websocket client: %v", err)
 		return errors.Wrapf(err, "websocket client: unable to dial %s response: %s",
 			parsedURL.Host, string(resp))
 	}
@@ -211,7 +212,7 @@ func (cs *ClientServerImpl) Connect() error {
 	defer cs.writeLock.Unlock()
 
 	cs.conn = websocketConn
-	seelog.Debugf("Established a Websocket connection to %s", cs.URL)
+	cs.Logger.Debugf("Established a Websocket connection to %s", cs.URL)
 	return nil
 }
 
@@ -238,11 +239,11 @@ func (cs *ClientServerImpl) SetReadDeadline(t time.Time) error {
 	if err == nil {
 		return nil
 	}
-	seelog.Warnf("Unable to set read deadline for websocket connection: %v for %s", err, cs.URL)
+	cs.Logger.Warnf("Unable to set read deadline for websocket connection: %v for %s", err, cs.URL)
 	// If we get connection closed error from SetReadDeadline, break out of the for loop and
 	// return an error
 	if opErr, ok := err.(*net.OpError); ok && strings.Contains(opErr.Err.Error(), errClosed) {
-		seelog.Errorf("Stopping redundant reads on closed network connection: %s", cs.URL)
+		cs.Logger.Errorf("Stopping redundant reads on closed network connection: %s", cs.URL)
 		return opErr
 	}
 	// An unhandled error has occurred while trying to extend read deadline.
@@ -263,12 +264,12 @@ func (cs *ClientServerImpl) forceCloseConnection() {
 	select {
 	case closeErr := <-closeChan:
 		if closeErr != nil {
-			seelog.Warnf("Unable to close websocket connection: %v for %s",
+			cs.Logger.Warnf("Unable to close websocket connection: %v for %s",
 				closeErr, cs.URL)
 		}
 	case <-ctx.Done():
 		if ctx.Err() != nil {
-			seelog.Warnf("Context canceled waiting for termination of websocket connection: %v for %s",
+			cs.Logger.Warnf("Context canceled waiting for termination of websocket connection: %v for %s",
 				ctx.Err(), cs.URL)
 		}
 	}
@@ -287,7 +288,7 @@ func (cs *ClientServerImpl) Disconnect(...interface{}) error {
 	// as the close frame needs to be sent to the server. Set the deadline
 	// for that as well.
 	if err := cs.conn.SetWriteDeadline(time.Now().Add(cs.RWTimeout)); err != nil {
-		seelog.Warnf("Unable to set write deadline for websocket connection: %v for %s", err, cs.URL)
+		cs.Logger.Warnf("Unable to set write deadline for websocket connection: %v for %s", err, cs.URL)
 	}
 	return cs.conn.Close()
 }
@@ -340,7 +341,7 @@ func (cs *ClientServerImpl) WriteMessage(send []byte) error {
 	// library returns 'nil' anyway for SetWriteDeadline
 	// https://github.com/gorilla/websocket/blob/4201258b820c74ac8e6922fc9e6b52f71fe46f8d/conn.go#L761
 	if err := cs.conn.SetWriteDeadline(time.Now().Add(cs.RWTimeout)); err != nil {
-		seelog.Warnf("Unable to set write deadline for websocket connection: %v for %s", err, cs.URL)
+		cs.Logger.Warnf("Unable to set write deadline for websocket connection: %v for %s", err, cs.URL)
 	}
 
 	return cs.conn.WriteMessage(websocket.TextMessage, send)
@@ -359,17 +360,17 @@ func (cs *ClientServerImpl) ConsumeMessages() error {
 		case err == nil:
 			if messageType != websocket.TextMessage {
 				// maybe not fatal though, we'll try to process it anyways
-				seelog.Errorf("Unexpected messageType: %v", messageType)
+				cs.Logger.Errorf("Unexpected messageType: %v", messageType)
 			}
 			cs.handleMessage(message)
 
 		case permissibleCloseCode(err):
-			seelog.Debugf("Connection closed for a valid reason: %s", err)
+			cs.Logger.Debugf("Connection closed for a valid reason: %s", err)
 			return io.EOF
 
 		default:
 			// Unexpected error occurred
-			seelog.Errorf("Error getting message from ws backend: error: [%v], messageType: [%v] ",
+			cs.Logger.Errorf("Error getting message from ws backend: error: [%v], messageType: [%v] ",
 				err, messageType)
 			return err
 		}
@@ -411,11 +412,11 @@ func (cs *ClientServerImpl) CreateRequestMessage(input interface{}) ([]byte, err
 func (cs *ClientServerImpl) handleMessage(data []byte) {
 	typedMessage, typeStr, err := DecodeData(data, cs.TypeDecoder)
 	if err != nil {
-		seelog.Warnf("Unable to handle message from backend: %v", err)
+		cs.Logger.Warnf("Unable to handle message from backend: %v", err)
 		return
 	}
 
-	seelog.Debugf("Received message of type: %s", typeStr)
+	cs.Logger.Debugf("Received message of type: %s", typeStr)
 
 	if cs.AnyRequestHandler != nil {
 		reflect.ValueOf(cs.AnyRequestHandler).Call([]reflect.Value{reflect.ValueOf(typedMessage)})
@@ -424,7 +425,7 @@ func (cs *ClientServerImpl) handleMessage(data []byte) {
 	if handler, ok := cs.RequestHandlers[typeStr]; ok {
 		reflect.ValueOf(handler).Call([]reflect.Value{reflect.ValueOf(typedMessage)})
 	} else {
-		seelog.Infof("No handler for message type: %s", typeStr)
+		cs.Logger.Infof("No handler for message type: %s", typeStr)
 	}
 }
 

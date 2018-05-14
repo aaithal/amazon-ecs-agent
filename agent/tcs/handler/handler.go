@@ -14,6 +14,7 @@
 package tcshandler
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/client"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
@@ -50,13 +52,13 @@ func StartMetricsSession(params TelemetrySessionParams) {
 	err := params.StatsEngine.MustInit(params.Ctx, params.TaskEngine, params.Cfg.Cluster,
 		params.ContainerInstanceArn)
 	if err != nil {
-		seelog.Warnf("Error initializing metrics engine: %v", err)
+		params.Logger.Warnf("Error initializing metrics engine: %v", err)
 		return
 	}
 
 	err = StartSession(params, params.StatsEngine)
 	if err != nil {
-		seelog.Warnf("Error starting metrics session with backend: %v", err)
+		params.Logger.Warnf("Error starting metrics session with backend: %v", err)
 	}
 }
 
@@ -69,10 +71,10 @@ func StartSession(params TelemetrySessionParams, statsEngine stats.Engine) error
 	for {
 		tcsError := startTelemetrySession(params, statsEngine)
 		if tcsError == nil || tcsError == io.EOF {
-			seelog.Info("TCS Websocket connection closed for a valid reason")
+			params.Logger.Info("TCS Websocket connection closed for a valid reason")
 			backoff.Reset()
 		} else {
-			seelog.Infof("Error from tcs; backing off: %v", tcsError)
+			params.Logger.Infof("Error from tcs; backing off: %v", tcsError)
 			params.time().Sleep(backoff.Duration())
 		}
 	}
@@ -81,13 +83,13 @@ func StartSession(params TelemetrySessionParams, statsEngine stats.Engine) error
 func startTelemetrySession(params TelemetrySessionParams, statsEngine stats.Engine) error {
 	tcsEndpoint, err := params.ECSClient.DiscoverTelemetryEndpoint(params.ContainerInstanceArn)
 	if err != nil {
-		seelog.Errorf("Unable to discover poll endpoint: %v", err)
+		params.Logger.Errorf("Unable to discover poll endpoint: %v", err)
 		return err
 	}
 	url := formatURL(tcsEndpoint, params.Cfg.Cluster, params.ContainerInstanceArn)
 	return startSession(url, params.Cfg, params.CredentialProvider, statsEngine,
 		defaultHeartbeatTimeout, defaultHeartbeatJitter, defaultPublishMetricsInterval,
-		params.DeregisterInstanceEventStream)
+		params.DeregisterInstanceEventStream, params.Logger)
 }
 
 func startSession(url string,
@@ -96,9 +98,10 @@ func startSession(url string,
 	statsEngine stats.Engine,
 	heartbeatTimeout, heartbeatJitter,
 	publishMetricsInterval time.Duration,
-	deregisterInstanceEventStream *eventstream.EventStream) error {
+	deregisterInstanceEventStream *eventstream.EventStream,
+	mlog *mux.PackageLogger) error {
 	client := tcsclient.New(url, cfg, credentialProvider, statsEngine,
-		publishMetricsInterval, wsRWTimeout, cfg.DisableMetrics)
+		publishMetricsInterval, wsRWTimeout, cfg.DisableMetrics, mlog)
 	defer client.Close()
 
 	err := deregisterInstanceEventStream.Subscribe(deregisterContainerInstanceHandler, client.Disconnect)
@@ -109,21 +112,22 @@ func startSession(url string,
 
 	err = client.Connect()
 	if err != nil {
-		seelog.Errorf("Error connecting to TCS: %v", err.Error())
+		mlog.Errorf("Error connecting to TCS: %v", err.Error())
 		return err
 	}
-	seelog.Info("Connected to TCS endpoint")
+	fmt.Println("TCS session logging to logger: %v", mlog)
+	mlog.Info("Connected to TCS endpoint")
 	// start a timer and listens for tcs heartbeats/acks. The timer is reset when
 	// we receive a heartbeat from the server or when a publish metrics message
 	// is acked.
 	timer := time.AfterFunc(utils.AddJitter(heartbeatTimeout, heartbeatJitter), func() {
 		// Close the connection if there haven't been any messages received from backend
 		// for a long time.
-		seelog.Info("TCS Connection hasn't had any activity for too long; disconnecting")
+		mlog.Info("TCS Connection hasn't had any activity for too long; disconnecting")
 		client.Disconnect()
 	})
 	defer timer.Stop()
-	client.AddRequestHandler(heartbeatHandler(timer))
+	client.AddRequestHandler(heartbeatHandler(timer, mlog))
 	client.AddRequestHandler(ackPublishMetricHandler(timer))
 	client.AddRequestHandler(ackPublishHealthMetricHandler(timer))
 	client.SetAnyRequestHandler(anyMessageHandler(client))
@@ -131,9 +135,9 @@ func startSession(url string,
 }
 
 // heartbeatHandler resets the heartbeat timer when HeartbeatMessage message is received from tcs.
-func heartbeatHandler(timer *time.Timer) func(*ecstcs.HeartbeatMessage) {
+func heartbeatHandler(timer *time.Timer, mlog *mux.PackageLogger) func(*ecstcs.HeartbeatMessage) {
 	return func(*ecstcs.HeartbeatMessage) {
-		seelog.Debug("Received HeartbeatMessage from tcs")
+		mlog.Debug("Received HeartbeatMessage from tcs")
 		timer.Reset(utils.AddJitter(defaultHeartbeatTimeout, defaultHeartbeatJitter))
 	}
 }

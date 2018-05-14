@@ -39,6 +39,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
 	"github.com/aws/amazon-ecs-agent/agent/handlers"
 	"github.com/aws/amazon-ecs-agent/agent/handlers/taskmetadata"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
@@ -63,6 +64,10 @@ const (
 
 	vpcIDAttributeName    = "ecs.vpc-id"
 	subnetIDAttributeName = "ecs.subnet-id"
+
+	acsLoggerName = "acs"
+	tcsLoggerName = "tcs"
+	logLinesInMem = 1000
 )
 
 var (
@@ -106,6 +111,7 @@ type ecsAgent struct {
 	terminationHandler    sighandlers.TerminationHandler
 	mobyPlugins           mobypkgwrapper.Plugins
 	resourceFields        *taskresource.ResourceFields
+	logger                *mux.Logger
 }
 
 // newAgent returns a new ecsAgent object, but does not start anything
@@ -170,6 +176,7 @@ func newAgent(
 		metadataManager:    metadataManager,
 		terminationHandler: sighandlers.StartDefaultTerminationHandler,
 		mobyPlugins:        mobypkgwrapper.NewPlugins(),
+		logger:             mux.NewLogger(logLinesInMem),
 	}, nil
 }
 
@@ -524,7 +531,8 @@ func (agent *ecsAgent) startAsyncRoutines(
 	go agent.terminationHandler(stateManager, taskEngine)
 
 	// Agent introspection api
-	go handlers.ServeHttp(&agent.containerInstanceARN, taskEngine, agent.cfg)
+	go handlers.ServeHttp(&agent.containerInstanceARN, taskEngine,
+		agent.cfg, agent.logger)
 
 	statsEngine := stats.NewDockerStatsEngine(agent.cfg, agent.dockerClient, containerChangeEventStream)
 
@@ -543,6 +551,7 @@ func (agent *ecsAgent) startAsyncRoutines(
 		ECSClient:                     client,
 		TaskEngine:                    taskEngine,
 		StatsEngine:                   statsEngine,
+		Logger:                        agent.logger.GetPackageLogger(tcsLoggerName),
 	}
 
 	// Start metrics session in a go routine
@@ -572,6 +581,7 @@ func (agent *ecsAgent) startACSSession(
 		taskEngine,
 		credentialsManager,
 		taskHandler,
+		agent.logger.GetPackageLogger(acsLoggerName),
 	)
 	seelog.Info("Beginning Polling for updates")
 	err := acsSession.Start()

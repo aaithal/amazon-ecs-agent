@@ -22,13 +22,13 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/cihub/seelog"
 )
 
 const (
@@ -60,7 +60,8 @@ func New(url string,
 	statsEngine stats.Engine,
 	publishMetricsInterval time.Duration,
 	rwTimeout time.Duration,
-	disableResourceMetrics bool) wsclient.ClientServer {
+	disableResourceMetrics bool,
+	mlog *mux.PackageLogger) wsclient.ClientServer {
 	cs := &clientServer{
 		statsEngine:            statsEngine,
 		publishTicker:          nil,
@@ -77,6 +78,7 @@ func New(url string,
 	cs.disableResourceMetrics = disableResourceMetrics
 	// TODO make this context inherited from the handler
 	cs.ctx, cs.cancel = context.WithCancel(context.TODO())
+	cs.Logger = mlog
 	return cs
 }
 
@@ -84,7 +86,7 @@ func New(url string,
 // AddRequestHandler). All request handlers should be added prior to making this
 // call as unhandled requests will be discarded.
 func (cs *clientServer) Serve() error {
-	seelog.Debug("TCS client starting websocket poll loop")
+	cs.Logger.Debug("TCS client starting websocket poll loop")
 	if !cs.IsReady() {
 		return fmt.Errorf("tcs client: websocket not ready for connections")
 	}
@@ -113,7 +115,7 @@ func (cs *clientServer) MakeRequest(input interface{}) error {
 		return err
 	}
 
-	seelog.Debugf("TCS client sending payload: %s", string(payload))
+	cs.Logger.Debugf("TCS client sending payload: %s", string(payload))
 	data, err := cs.signRequest(payload)
 	if err != nil {
 		return err
@@ -161,7 +163,7 @@ func (cs *clientServer) Close() error {
 // publishMetrics invokes the PublishMetricsRequest on the clientserver object.
 func (cs *clientServer) publishMetrics() {
 	if cs.publishTicker == nil {
-		seelog.Debug("Skipping publishing metrics. Publish ticker is uninitialized")
+		cs.Logger.Debug("Skipping publishing metrics. Publish ticker is uninitialized")
 		return
 	}
 
@@ -170,7 +172,7 @@ func (cs *clientServer) publishMetrics() {
 	// due to a connection reset.
 	err := cs.publishMetricsOnce()
 	if err != nil && err != stats.EmptyMetricsError {
-		seelog.Warnf("Error publishing metrics: %v", err)
+		cs.Logger.Warnf("Error publishing metrics: %v", err)
 	}
 	// don't simply range over the ticker since its channel doesn't ever get closed
 	for {
@@ -178,7 +180,7 @@ func (cs *clientServer) publishMetrics() {
 		case <-cs.publishTicker.C:
 			err := cs.publishMetricsOnce()
 			if err != nil {
-				seelog.Warnf("Error publishing metrics: %v", err)
+				cs.Logger.Warnf("Error publishing metrics: %v", err)
 			}
 		case <-cs.ctx.Done():
 			return
@@ -250,7 +252,7 @@ func (cs *clientServer) metricsToPublishMetricRequests() ([]*ecstcs.PublishMetri
 // publishHealthMetrics send the container health information to backend
 func (cs *clientServer) publishHealthMetrics() {
 	if cs.publishTicker == nil {
-		seelog.Debug("Skipping publishing health metrics. Publish ticker is uninitialized")
+		cs.Logger.Debug("Skipping publishing health metrics. Publish ticker is uninitialized")
 		return
 	}
 
@@ -259,14 +261,14 @@ func (cs *clientServer) publishHealthMetrics() {
 	// due to a connection reset.
 	err := cs.publishHealthMetricsOnce()
 	if err != nil {
-		seelog.Warnf("Unable to publish health metrics: %v", err)
+		cs.Logger.Warnf("Unable to publish health metrics: %v", err)
 	}
 	for {
 		select {
 		case <-cs.publishHealthTicker.C:
 			err := cs.publishHealthMetricsOnce()
 			if err != nil {
-				seelog.Warnf("Unable to publish health metrics: %v", err)
+				cs.Logger.Warnf("Unable to publish health metrics: %v", err)
 			}
 		case <-cs.ctx.Done():
 			return
@@ -299,7 +301,7 @@ func (cs *clientServer) createPublishHealthRequests() ([]*ecstcs.PublishHealthRe
 	}
 
 	if metadata == nil || taskHealthMetrics == nil {
-		seelog.Debug("No container health metrics to report")
+		cs.Logger.Debug("No container health metrics to report")
 		return nil, nil
 	}
 

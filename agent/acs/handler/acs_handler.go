@@ -16,6 +16,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 	"strconv"
@@ -34,13 +35,13 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/eventhandler"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime"
 	"github.com/aws/amazon-ecs-agent/agent/version"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/cihub/seelog"
 )
 
 const (
@@ -91,6 +92,7 @@ type session struct {
 	cancel                          context.CancelFunc
 	backoff                         utils.Backoff
 	resources                       sessionResources
+	mlog                            *mux.PackageLogger
 	_heartbeatTimeout               time.Duration
 	_heartbeatJitter                time.Duration
 	_inactiveInstanceReconnectDelay time.Duration
@@ -119,6 +121,7 @@ type acsSessionResources struct {
 	// It is set to 'true' for the very first successful connection on
 	// agent start. It is set to false for all successive connections
 	sendCredentials bool
+	mlog            *mux.PackageLogger
 }
 
 // sessionState defines state recorder interface for the
@@ -144,8 +147,9 @@ func NewSession(ctx context.Context,
 	stateManager statemanager.StateManager,
 	taskEngine engine.TaskEngine,
 	credentialsManager rolecredentials.Manager,
-	taskHandler *eventhandler.TaskHandler) Session {
-	resources := newSessionResources(credentialsProvider)
+	taskHandler *eventhandler.TaskHandler,
+	mlog *mux.PackageLogger) Session {
+	resources := newSessionResources(credentialsProvider, mlog)
 	backoff := utils.NewSimpleBackoff(connectionBackoffMin, connectionBackoffMax,
 		connectionBackoffJitter, connectionBackoffMultiplier)
 	derivedContext, cancel := context.WithCancel(ctx)
@@ -165,6 +169,7 @@ func NewSession(ctx context.Context,
 		cancel:                          cancel,
 		backoff:                         backoff,
 		resources:                       resources,
+		mlog:                            mlog,
 		_heartbeatTimeout:               heartbeatTimeout,
 		_heartbeatJitter:                heartbeatJitter,
 		_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay,
@@ -190,7 +195,7 @@ func (acsSession *session) Start() error {
 	for {
 		select {
 		case <-connectToACS:
-			seelog.Debugf("Received connect to ACS message")
+			acsSession.mlog.Debug("Received connect to ACS message")
 			// Start a session with ACS
 			acsError := acsSession.startSessionOnce()
 			// Session with ACS was stopped with some error, start processing the error
@@ -198,23 +203,23 @@ func (acsSession *session) Start() error {
 			if isInactiveInstance {
 				// If the instance was deregistered, send an event to the event stream
 				// for the same
-				seelog.Debug("Container instance is deregistered, notifying listeners")
+				acsSession.mlog.Debug("Container instance is deregistered, notifying listeners")
 				err := acsSession.deregisterInstanceEventStream.WriteToEventStream(struct{}{})
 				if err != nil {
-					seelog.Debugf("Failed to write to deregister container instance event stream, err: %v", err)
+					acsSession.mlog.Debugf("Failed to write to deregister container instance event stream, err: %v", err)
 				}
 			}
 			if shouldReconnectWithoutBackoff(acsError) {
 				// If ACS closed the connection, there's no need to backoff,
 				// reconnect immediately
-				seelog.Info("ACS Websocket connection closed for a valid reason")
+				acsSession.mlog.Info("ACS Websocket connection closed for a valid reason")
 				acsSession.backoff.Reset()
 				sendEmptyMessageOnChannel(connectToACS)
 			} else {
 				// Disconnected unexpectedly from ACS, compute backoff duration to
 				// reconnect
 				reconnectDelay := acsSession.computeReconnectDelay(isInactiveInstance)
-				seelog.Infof("Reconnecting to ACS in: %s", reconnectDelay.String())
+				acsSession.mlog.Infof("Reconnecting to ACS in: %s", reconnectDelay.String())
 				waitComplete := acsSession.waitForDuration(reconnectDelay)
 				if waitComplete {
 					// If the context was not cancelled and we've waited for the
@@ -225,11 +230,11 @@ func (acsSession *session) Start() error {
 					// Wait was interrupted. We expect the session to close as canelling
 					// the session context is the only way to end up here. Print a message
 					// to indicate the same
-					seelog.Info("Interrupted waiting for reconnect delay to elapse; Expect session to close")
+					acsSession.mlog.Info("Interrupted waiting for reconnect delay to elapse; Expect session to close")
 				}
 			}
 		case <-acsSession.ctx.Done():
-			seelog.Debugf("ACS session context cancelled")
+			acsSession.mlog.Debug("ACS session context cancelled")
 			return acsSession.ctx.Err()
 		}
 
@@ -241,7 +246,7 @@ func (acsSession *session) Start() error {
 func (acsSession *session) startSessionOnce() error {
 	acsEndpoint, err := acsSession.ecsClient.DiscoverPollEndpoint(acsSession.containerInstanceARN)
 	if err != nil {
-		seelog.Errorf("Unable to discover poll endpoint, err: %v", err)
+		acsSession.mlog.Errorf("Unable to discover poll endpoint, err: %v", err)
 		return err
 	}
 
@@ -306,14 +311,16 @@ func (acsSession *session) startACSSession(client wsclient.ClientServer) error {
 
 	err := client.Connect()
 	if err != nil {
-		seelog.Errorf("Error connecting to ACS: %v", err)
+		acsSession.mlog.Errorf("Error connecting to ACS: %v", err)
 		return err
 	}
-	seelog.Info("Connected to ACS endpoint")
+	fmt.Println("ACS session logging to logger: %v", acsSession.mlog)
+	acsSession.mlog.Info("Connected to ACS endpoint")
 	// Start inactivity timer for closing the connection
-	timer := newDisconnectionTimer(client, acsSession.heartbeatTimeout(), acsSession.heartbeatJitter())
+	timer := newDisconnectionTimer(client, acsSession.heartbeatTimeout(),
+		acsSession.heartbeatJitter(), acsSession.mlog)
 	// Any message from the server resets the disconnect timeout
-	client.SetAnyRequestHandler(anyMessageHandler(timer, client))
+	client.SetAnyRequestHandler(anyMessageHandler(timer, client, acsSession.mlog))
 	defer timer.Stop()
 
 	acsSession.resources.connectedToACS()
@@ -330,7 +337,8 @@ func (acsSession *session) startACSSession(client wsclient.ClientServer) error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- client.Serve()
+		se := client.Serve()
+		serveErr <- se
 	}()
 
 	for {
@@ -379,7 +387,7 @@ func (acsSession *session) heartbeatJitter() time.Duration {
 
 // createACSClient creates the ACS Client using the specified URL
 func (acsResources *acsSessionResources) createACSClient(url string, cfg *config.Config) wsclient.ClientServer {
-	return acsclient.New(url, cfg, acsResources.credentialsProvider, wsRWTimeout)
+	return acsclient.New(url, cfg, acsResources.credentialsProvider, wsRWTimeout, acsResources.mlog)
 }
 
 // connectedToACS records a successful connection to ACS
@@ -394,10 +402,12 @@ func (acsResources *acsSessionResources) getSendCredentialsURLParameter() string
 	return strconv.FormatBool(acsResources.sendCredentials)
 }
 
-func newSessionResources(credentialsProvider *credentials.Credentials) sessionResources {
+func newSessionResources(credentialsProvider *credentials.Credentials,
+	mlog *mux.PackageLogger) sessionResources {
 	return &acsSessionResources{
 		credentialsProvider: credentialsProvider,
 		sendCredentials:     true,
+		mlog:                mlog,
 	}
 }
 
@@ -423,13 +433,16 @@ func acsWsURL(endpoint, cluster, containerInstanceArn string, taskEngine engine.
 
 // newDisconnectionTimer creates a new time object, with a callback to
 // disconnect from ACS on inactivity
-func newDisconnectionTimer(client wsclient.ClientServer, timeout time.Duration, jitter time.Duration) ttime.Timer {
+func newDisconnectionTimer(client wsclient.ClientServer,
+	timeout time.Duration,
+	jitter time.Duration,
+	mlog *mux.PackageLogger) ttime.Timer {
 	timer := time.AfterFunc(utils.AddJitter(timeout, jitter), func() {
-		seelog.Warn("ACS Connection hasn't had any activity for too long; closing connection")
+		mlog.Warn("ACS Connection hasn't had any activity for too long; closing connection")
 		if err := client.Close(); err != nil {
-			seelog.Warnf("Error disconnecting: %v", err)
+			mlog.Warnf("Error disconnecting: %v", err)
 		}
-		seelog.Info("Disconnected from ACS")
+		mlog.Info("Disconnected from ACS")
 	})
 
 	return timer
@@ -437,12 +450,14 @@ func newDisconnectionTimer(client wsclient.ClientServer, timeout time.Duration, 
 
 // anyMessageHandler handles any server message. Any server message means the
 // connection is active and thus the heartbeat disconnect should not occur
-func anyMessageHandler(timer ttime.Timer, client wsclient.ClientServer) func(interface{}) {
+func anyMessageHandler(timer ttime.Timer,
+	client wsclient.ClientServer,
+	mlog *mux.PackageLogger) func(interface{}) {
 	return func(interface{}) {
-		seelog.Debug("ACS activity occurred")
+		mlog.Debug("ACS activity occurred")
 		// Reset read deadline as there's activity on the channel
 		if err := client.SetReadDeadline(time.Now().Add(wsRWTimeout)); err != nil {
-			seelog.Warnf("Unable to extend read deadline for ACS connection: %v", err)
+			mlog.Warnf("Unable to extend read deadline for ACS connection: %v", err)
 		}
 
 		// Reset hearbeat timer

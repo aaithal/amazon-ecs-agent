@@ -19,3 +19,4 @@ _bin/
 /.idea/
 /misc/taskmetadata-validator/taskmetadata-validator
 /bin
+*.lock
