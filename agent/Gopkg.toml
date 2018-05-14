@@ -83,3 +83,7 @@
 [[constraint]]
   name = "github.com/didip/tollbooth"
   version = "3.0.2"
+
+[[constraint]]
+  name = "github.com/op/go-logging"
+  revision = "970db520ece77730c7e4724c61121037378659d9"

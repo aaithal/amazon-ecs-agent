@@ -211,6 +211,11 @@
   revision = "0b12d6b5"
 
 [[projects]]
+  name = "github.com/op/go-logging"
+  packages = ["."]
+  revision = "970db520ece77730c7e4724c61121037378659d9"
+
+[[projects]]
   name = "github.com/opencontainers/go-digest"
   packages = ["."]
   revision = "279bed98673dd5bef374d3b6e4b09e2af76183bf"
@@ -336,6 +341,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "9d2cc8b52dc77195516205e880e2e1099eabd15190bcc2c8f0f42df0d5abaf2e"
+  inputs-digest = "ba06f07bfb1b69ab8b08b9c389bbd5504406c6f46afa5dd8ce7c7146a7aebedb"
   solver-name = "gps-cdcl"
   solver-version = 1
