@@ -154,16 +154,43 @@ func (client *APIECSClient) registerContainerInstance(clusterRef string, contain
 	// Add additional attributes such as the os type
 	registrationAttributes = append(registrationAttributes, client.getAdditionalAttributes()...)
 	registerRequest.Attributes = registrationAttributes
+	registerRequest = client.setInstanceIdentity(registerRequest)
+
+	resources, err := client.getResources()
+	if err != nil {
+		return "", nil
+	}
+
+	registerRequest.TotalResources = resources
+	resp, err := client.standardClient.RegisterContainerInstance(&registerRequest)
+	if err != nil {
+		seelog.Errorf("Could not register: %v", err)
+		return "", err
+	}
+	seelog.Info("Registered container instance with cluster!")
+	err = validateRegisteredAttributes(registerRequest.Attributes, resp.ContainerInstance.Attributes)
+	return aws.StringValue(resp.ContainerInstance.ContainerInstanceArn), err
+}
+
+func (client *APIECSClient) setInstanceIdentity(registerRequest ecs.RegisterContainerInstanceInput) ecs.RegisterContainerInstanceInput {
+	instanceIdentityDoc := ""
+	instanceIdentitySignature := ""
+
+	if client.config.NoIID {
+		seelog.Info("Fetching Instance ID Document has been disabled")
+		registerRequest.InstanceIdentityDocument = &instanceIdentityDoc
+		registerRequest.InstanceIdentityDocumentSignature = &instanceIdentitySignature
+		return registerRequest
+	}
+
 	iidRetrieved := true
 	instanceIdentityDoc, err := client.ec2metadata.GetDynamicData(ec2.InstanceIdentityDocumentResource)
 	if err != nil {
 		seelog.Errorf("Unable to get instance identity document: %v", err)
 		iidRetrieved = false
-		instanceIdentityDoc = ""
 	}
 	registerRequest.InstanceIdentityDocument = &instanceIdentityDoc
 
-	instanceIdentitySignature := ""
 	if iidRetrieved {
 		instanceIdentitySignature, err = client.ec2metadata.GetDynamicData(ec2.InstanceIdentityDocumentSignatureResource)
 		if err != nil {
@@ -172,14 +199,17 @@ func (client *APIECSClient) registerContainerInstance(clusterRef string, contain
 	}
 
 	registerRequest.InstanceIdentityDocumentSignature = &instanceIdentitySignature
+	return registerRequest
+}
 
+func (client *APIECSClient) getResources() ([]*ecs.Resource, error) {
 	// Micro-optimization, the pointer to this is used multiple times below
 	integerStr := "INTEGER"
 
 	cpu, mem := getCpuAndMemory()
 	remainingMem := mem - int64(client.config.ReservedMemory)
 	if remainingMem < 0 {
-		return "", fmt.Errorf(
+		return nil, fmt.Errorf(
 			"api register-container-instance: reserved memory is higher than available memory on the host, total memory: %d, reserved: %d",
 			mem, client.config.ReservedMemory)
 	}
@@ -205,17 +235,33 @@ func (client *APIECSClient) registerContainerInstance(clusterRef string, contain
 		StringSetValue: utils.Uint16SliceToStringSlice(client.config.ReservedPortsUDP),
 	}
 
-	resources := []*ecs.Resource{&cpuResource, &memResource, &portResource, &udpPortResource}
-	registerRequest.TotalResources = resources
+	return []*ecs.Resource{&cpuResource, &memResource, &portResource, &udpPortResource}, nil
+}
 
-	resp, err := client.standardClient.RegisterContainerInstance(&registerRequest)
-	if err != nil {
-		seelog.Errorf("Could not register: %v", err)
-		return "", err
+func getCpuAndMemory() (int64, int64) {
+	memInfo, err := system.ReadMemInfo()
+	mem := int64(0)
+	if err == nil {
+		mem = memInfo.MemTotal / 1024 / 1024 // MiB
+	} else {
+		seelog.Errorf("Unable getting memory info: %v", err)
 	}
-	seelog.Info("Registered container instance with cluster!")
-	err = validateRegisteredAttributes(registerRequest.Attributes, resp.ContainerInstance.Attributes)
-	return aws.StringValue(resp.ContainerInstance.ContainerInstanceArn), err
+
+	cpu := runtime.NumCPU() * 1024
+
+	return int64(cpu), mem
+}
+
+func validateRegisteredAttributes(expectedAttributes, actualAttributes []*ecs.Attribute) error {
+	var err error
+	expectedAttributesMap := attributesToMap(expectedAttributes)
+	actualAttributesMap := attributesToMap(actualAttributes)
+	missingAttributes, err := findMissingAttributes(expectedAttributesMap, actualAttributesMap)
+	if err != nil {
+		msg := strings.Join(missingAttributes, ",")
+		seelog.Errorf("Error registering attributes: %v", msg)
+	}
+	return err
 }
 
 func attributesToMap(attributes []*ecs.Attribute) map[string]string {
@@ -241,32 +287,6 @@ func findMissingAttributes(expectedAttributes, actualAttributes map[string]strin
 		err = apierrors.NewAttributeError("Attribute validation failed")
 	}
 	return missingAttributes, err
-}
-
-func validateRegisteredAttributes(expectedAttributes, actualAttributes []*ecs.Attribute) error {
-	var err error
-	expectedAttributesMap := attributesToMap(expectedAttributes)
-	actualAttributesMap := attributesToMap(actualAttributes)
-	missingAttributes, err := findMissingAttributes(expectedAttributesMap, actualAttributesMap)
-	if err != nil {
-		msg := strings.Join(missingAttributes, ",")
-		seelog.Errorf("Error registering attributes: %v", msg)
-	}
-	return err
-}
-
-func getCpuAndMemory() (int64, int64) {
-	memInfo, err := system.ReadMemInfo()
-	mem := int64(0)
-	if err == nil {
-		mem = memInfo.MemTotal / 1024 / 1024 // MiB
-	} else {
-		seelog.Errorf("Unable getting memory info: %v", err)
-	}
-
-	cpu := runtime.NumCPU() * 1024
-
-	return int64(cpu), mem
 }
 
 func (client *APIECSClient) getAdditionalAttributes() []*ecs.Attribute {

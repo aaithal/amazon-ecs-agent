@@ -427,6 +427,11 @@ func (agent *ecsAgent) newStateManager(
 // constructVPCSubnetAttributes returns vpc and subnet IDs of the instance as
 // an attribute list
 func (agent *ecsAgent) constructVPCSubnetAttributes() []*ecs.Attribute {
+	if agent.cfg.NoTaskENIVPCSubnet {
+		seelog.Info("Registering VPC and Subnet IDs has been disabled")
+		return nil
+	}
+
 	return []*ecs.Attribute{
 		{
 			Name:  aws.String(vpcIDAttributeName),

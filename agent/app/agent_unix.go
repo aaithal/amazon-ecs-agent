@@ -51,7 +51,8 @@ func (agent *ecsAgent) startWindowsService() int {
 // the Agent to support the 'awsvpc' networking mode. A non nil error is returned
 // if an error is encountered during this process. An additional boolean flag to
 // indicate if this error is considered terminal is also returned
-func (agent *ecsAgent) initializeTaskENIDependencies(state dockerstate.TaskEngineState, taskEngine engine.TaskEngine) (error, bool) {
+func (agent *ecsAgent) initializeTaskENIDependencies(state dockerstate.TaskEngineState,
+	taskEngine engine.TaskEngine) (error, bool) {
 	// Check if the Agent process's pid  == 1, which means it's running without an init system
 	if agent.os.Getpid() == initPID {
 		// This is a terminal error. Bad things happen with invoking the
@@ -101,6 +102,10 @@ func (agent *ecsAgent) initializeTaskENIDependencies(state dockerstate.TaskEngin
 // setVPCSubnet sets the vpc and subnet ids for the agent by querying the
 // instance metadata service
 func (agent *ecsAgent) setVPCSubnet() (error, bool) {
+	if agent.cfg.NoTaskENIVPCSubnet {
+		seelog.Info("Fetching VPC Subnet information for the instance has been disabled")
+		return nil, false
+	}
 	mac, err := agent.ec2MetadataClient.PrimaryENIMAC()
 	if err != nil {
 		return fmt.Errorf("unable to get mac address of instance's primary ENI from instance metadata: %v", err), false
