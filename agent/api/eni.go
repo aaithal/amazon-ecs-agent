@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/cihub/seelog"
 	"github.com/pkg/errors"
 )
 
@@ -155,6 +156,13 @@ func ValidateTaskENI(acsenis []*ecsacs.ElasticNetworkInterface) error {
 	// Only one ipv4 should be associated with the eni
 	// No more than one ipv6 should be associated with the eni
 	if len(acsenis) != 1 {
+		for _, e := range acsenis {
+			if e == nil {
+				seelog.Warn("More than one ENI: nil eni in acs")
+			} else {
+				seelog.Warnf("More than one ENI: %s", e.String())
+			}
+		}
 		return errors.Errorf("eni message validation: more than one ENIs in the message(%d)", len(acsenis))
 	} else if len(acsenis[0].Ipv4Addresses) != 1 {
 		return errors.Errorf("eni message validation: more than one ipv4 addresses in the message(%d)", len(acsenis[0].Ipv4Addresses))

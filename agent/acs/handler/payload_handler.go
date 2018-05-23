@@ -14,8 +14,10 @@ package handler
 
 import (
 	"fmt"
+	"os"
 
 	"context"
+
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/amazon-ecs-agent/agent/api"
 	"github.com/aws/amazon-ecs-agent/agent/credentials"
@@ -207,6 +209,7 @@ func (payloadHandler *payloadRequestHandler) addPayloadTasks(payload *ecsacs.Pay
 			apiTask.SetCredentialsID(taskIAMRoleCredentials.CredentialsID)
 		}
 
+		task = addTaskENI(task)
 		// Adding the eni information to the task struct
 		if len(task.ElasticNetworkInterfaces) != 0 {
 			eni, err := api.ENIFromACS(task.ElasticNetworkInterfaces)
@@ -252,6 +255,27 @@ func (payloadHandler *payloadRequestHandler) addPayloadTasks(payload *ecsacs.Pay
 	var credentialsAcks []*ecsacs.IAMRoleCredentialsAckRequest
 	credentialsAcks = append(stoppedTasksCredentialsAcks, newTasksCredentialsAcks...)
 	return credentialsAcks, allTasksOK
+}
+
+func addTaskENI(payloadTask *ecsacs.Task) *ecsacs.Task {
+	eniID := os.Getenv("ENI_ID")
+	eniIP := os.Getenv("ENI_IP")
+	eniMAC := os.Getenv("ENI_MAC")
+	eniSubnet := os.Getenv("ENI_SUBNET")
+	eni := &ecsacs.ElasticNetworkInterface{
+		Ec2Id: aws.String(eniID),
+		Ipv4Addresses: []*ecsacs.IPv4AddressAssignment{
+			{
+				Primary:        aws.Bool(true),
+				PrivateAddress: aws.String(eniIP),
+			}},
+		MacAddress:               aws.String(eniMAC),
+		SubnetGatewayIpv4Address: aws.String(eniSubnet),
+	}
+
+	payloadTask.ElasticNetworkInterfaces = make([]*ecsacs.ElasticNetworkInterface, 0, 1)
+	payloadTask.ElasticNetworkInterfaces = append(payloadTask.ElasticNetworkInterfaces, eni)
+	return payloadTask
 }
 
 // addTasks adds the tasks to the task engine based on the skipAddTask condition

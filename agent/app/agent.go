@@ -215,6 +215,7 @@ func (agent *ecsAgent) doStart(containerChangeEventStream *eventstream.EventStre
 	taskEngine, currentEC2InstanceID, err := agent.newTaskEngine(containerChangeEventStream,
 		credentialsManager, state, imageManager)
 	if err != nil {
+		seelog.Criticalf("Error creating state task manager: %v", err)
 		return exitcodes.ExitTerminal
 	}
 
@@ -343,7 +344,8 @@ func (agent *ecsAgent) newTaskEngine(containerChangeEventStream *eventstream.Eve
 	}
 
 	currentEC2InstanceID := agent.getEC2InstanceID()
-	if previousEC2InstanceID != "" && previousEC2InstanceID != currentEC2InstanceID {
+	// if previousEC2InstanceID != "" && previousEC2InstanceID != currentEC2InstanceID {
+	if previousEC2InstanceID != currentEC2InstanceID {
 		seelog.Warnf(instanceIDMismatchErrorFormat,
 			previousEC2InstanceID, currentEC2InstanceID)
 
