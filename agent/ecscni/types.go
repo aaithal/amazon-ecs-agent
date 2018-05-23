@@ -119,6 +119,9 @@ type ENIConfig struct {
 	// BlockInstanceMetdata specifies if InstanceMetadata endpoint should be
 	// blocked
 	BlockInstanceMetdata bool `json:"block-instance-metadata"`
+	// WIP
+	// SubnetGatewayIPV4Address is the address to the subnet gate for the eni
+	SubnetGatewayIPV4Address string `json:"subnetgateway-ipv4-address"`
 }
 
 // Config contains all the information to set up the container namespace using

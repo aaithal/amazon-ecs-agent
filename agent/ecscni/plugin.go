@@ -290,13 +290,14 @@ func (client *cniClient) constructNetworkConfig(cfg interface{}, plugin string) 
 
 func (client *cniClient) createENINetworkConfig(cfg *Config) (string, *libcni.NetworkConfig, error) {
 	eniConf := ENIConfig{
-		Type:                 ECSENIPluginName,
-		CNIVersion:           client.cniVersion,
-		ENIID:                cfg.ENIID,
-		IPV4Address:          cfg.ENIIPV4Address,
-		MACAddress:           cfg.ENIMACAddress,
-		IPV6Address:          cfg.ENIIPV6Address,
-		BlockInstanceMetdata: cfg.BlockInstanceMetdata,
+		Type:                     ECSENIPluginName,
+		CNIVersion:               client.cniVersion,
+		ENIID:                    cfg.ENIID,
+		IPV4Address:              cfg.ENIIPV4Address,
+		MACAddress:               cfg.ENIMACAddress,
+		IPV6Address:              cfg.ENIIPV6Address,
+		BlockInstanceMetdata:     cfg.BlockInstanceMetdata,
+		SubnetGatewayIPV4Address: cfg.SubnetGatewayIPV4Address,
 	}
 	networkConfig, err := client.constructNetworkConfig(eniConf, ECSENIPluginName)
 	if err != nil {
