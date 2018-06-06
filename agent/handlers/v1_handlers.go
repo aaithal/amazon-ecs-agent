@@ -30,13 +30,11 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/engine/dockerstate"
 	"github.com/aws/amazon-ecs-agent/agent/handlers/types/v1"
 	"github.com/aws/amazon-ecs-agent/agent/handlers/types/v2"
-	"github.com/aws/amazon-ecs-agent/agent/logger"
 	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/version"
+	"github.com/cihub/seelog"
 )
-
-var log = logger.ForModule("Handlers")
 
 const (
 	dockerIdQueryField = "dockerid"
@@ -75,7 +73,7 @@ func ServeHttp(containerInstanceArn *string,
 			// now, not critical if this gets interrupted
 			err := server.ListenAndServe()
 			once.Do(func() {
-				log.Error("Error running http api", "err", err)
+				seelog.Errorf("Unable to run http api: %v", err)
 			})
 			return err
 		})
@@ -149,7 +147,8 @@ func tasksV1RequestHandlerMaker(taskEngine DockerStateResolver) func(http.Respon
 		taskArn, taskArnExists := ValueFromRequest(r, taskArnQueryField)
 		var status int
 		if dockerIdExists && taskArnExists {
-			log.Info("Request contains both ", dockerIdQueryField, " and ", taskArnQueryField, ". Expect at most one of these.")
+			seelog.Infof("Request contains both [%s] and [%s]. Expect at most one of these",
+				dockerIdQueryField, taskArnQueryField)
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(responseJSON)
 			return
@@ -169,7 +168,7 @@ func tasksV1RequestHandlerMaker(taskEngine DockerStateResolver) func(http.Respon
 					task = tasks[0]
 					found = true
 				} else {
-					log.Info("Multiple tasks found for requested dockerId: " + dockerId)
+					seelog.Infof("Multiple tasks found for requested dockerId: %s", dockerId)
 					w.WriteHeader(http.StatusBadRequest)
 					w.Write(responseJSON)
 					return
@@ -198,7 +197,7 @@ func createTaskJSONResponse(task *apitask.Task, found bool, resourceId string, s
 		containerMap, _ := state.ContainerMapByArn(task.Arn)
 		responseJSON, _ = json.Marshal(newTaskResponse(task, containerMap))
 	} else {
-		log.Warn("Could not find requested resource: " + resourceId)
+		seelog.Warnf("Could not find requested resource: %v", resourceId)
 		responseJSON, _ = json.Marshal(&v1.TaskResponse{})
 		status = http.StatusNotFound
 	}
@@ -312,7 +311,7 @@ func logsRequestHandlerMaker(logger *mux.Logger) func(http.ResponseWriter, *http
 		var responseJSON []byte
 		name, ok := ValueFromRequest(r, "from")
 		if !ok {
-			log.Warn("Missing required param: 'from'")
+			seelog.Warn("Missing required param: 'from'")
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(responseJSON)
 			return
@@ -320,7 +319,7 @@ func logsRequestHandlerMaker(logger *mux.Logger) func(http.ResponseWriter, *http
 		w.WriteHeader(http.StatusOK)
 		logLines, err := logger.GetLogLines(name)
 		if err != nil {
-			log.Warn("Unable to get log lines for package", "error", err, "package", name)
+			seelog.Warnf("Unable to get log lines for package [%s]: %v", err, name)
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(responseJSON)
 			return
