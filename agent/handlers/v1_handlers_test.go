@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	apicontainer "github.com/aws/amazon-ecs-agent/agent/api/container"
@@ -31,6 +32,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/handlers/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/handlers/mocks/http"
 	"github.com/aws/amazon-ecs-agent/agent/handlers/types/v1"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/utils/mocks"
 	"github.com/golang/mock/gomock"
@@ -61,7 +63,7 @@ func TestMetadataHandler(t *testing.T) {
 }
 
 func TestListMultipleTasks(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks")
+	recorder := performMockRequest(t, "/v1/tasks", nil)
 
 	var tasksResponse v1.TasksResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &tasksResponse)
@@ -75,7 +77,7 @@ func TestListMultipleTasks(t *testing.T) {
 func TestGetTaskByDockerID(t *testing.T) {
 	// stateSetupHelper uses the convention of dockerid-$arn-$containerName; the
 	// second task has a container named foo
-	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-task2-foo")
+	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-task2-foo", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -87,13 +89,13 @@ func TestGetTaskByDockerID(t *testing.T) {
 }
 
 func TestGetTaskByShortDockerIDMultiple(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-tas")
+	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-tas", nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code, "Expected http 400 for dockerid with multiple matches")
 }
 
 func TestGetTaskShortByDockerID404(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?dockerid=notfound")
+	recorder := performMockRequest(t, "/v1/tasks?dockerid=notfound", nil)
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code, "API did not return 404 for bad dockerid")
 }
@@ -101,7 +103,7 @@ func TestGetTaskShortByDockerID404(t *testing.T) {
 func TestGetTaskByShortDockerID(t *testing.T) {
 	// stateSetupHelper uses the convention of dockerid-$arn-$containerName; the
 	// first task has a container name prefix of dockerid-tas
-	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-by")
+	recorder := performMockRequest(t, "/v1/tasks?dockerid=dockerid-by", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -111,7 +113,7 @@ func TestGetTaskByShortDockerID(t *testing.T) {
 }
 
 func TestGetTaskByDockerID404(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?dockerid=does-not-exist")
+	recorder := performMockRequest(t, "/v1/tasks?dockerid=does-not-exist", nil)
 
 	if recorder.Code != 404 {
 		t.Error("API did not return 404 for bad dockerid")
@@ -119,7 +121,7 @@ func TestGetTaskByDockerID404(t *testing.T) {
 }
 
 func TestGetTaskByTaskArn(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=task1")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=task1", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -131,7 +133,7 @@ func TestGetTaskByTaskArn(t *testing.T) {
 }
 
 func TestGetAWSVPCTaskByTaskArn(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=awsvpcTask")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=awsvpcTask", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -146,7 +148,7 @@ func TestGetAWSVPCTaskByTaskArn(t *testing.T) {
 }
 
 func TestGetHostNeworkingTaskByTaskArn(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=hostModeNetworkingTask")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=hostModeNetworkingTask", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -163,7 +165,7 @@ func TestGetHostNeworkingTaskByTaskArn(t *testing.T) {
 }
 
 func TestGetBridgeNeworkingTaskByTaskArn(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=bridgeModeNetworkingTask")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=bridgeModeNetworkingTask", nil)
 
 	var taskResponse v1.TaskResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &taskResponse)
@@ -180,7 +182,7 @@ func TestGetBridgeNeworkingTaskByTaskArn(t *testing.T) {
 }
 
 func TestGetTaskByTaskArnNotFound(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=doesnotexist")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=doesnotexist", nil)
 
 	if recorder.Code != http.StatusNotFound {
 		t.Errorf("Expected %d for bad taskarn, but was %d", http.StatusNotFound, recorder.Code)
@@ -188,7 +190,7 @@ func TestGetTaskByTaskArnNotFound(t *testing.T) {
 }
 
 func TestGetTaskByTaskArnAndDockerIDBadRequest(t *testing.T) {
-	recorder := performMockRequest(t, "/v1/tasks?taskarn=task2&dockerid=foo")
+	recorder := performMockRequest(t, "/v1/tasks?taskarn=task2&dockerid=foo", nil)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Errorf("Expected %d for both arn and dockerid, but was %d", http.StatusBadRequest, recorder.Code)
@@ -268,6 +270,30 @@ func TestLicenseHandlerError(t *testing.T) {
 	mockResponseWriter.EXPECT().WriteHeader(http.StatusInternalServerError)
 
 	licenseHandler(mockResponseWriter, nil)
+}
+
+func TestLoggingHandlerMissingParam(t *testing.T) {
+	logger := mux.NewLogger(1)
+	recorder := performMockRequest(t, "/logs", logger)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestLoggingHandlerUnknownPackage(t *testing.T) {
+	logger := mux.NewLogger(1)
+	recorder := performMockRequest(t, "/logs?from=acs", logger)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestLoggingHandler(t *testing.T) {
+	logger := mux.NewLogger(1)
+	acsLogger := logger.GetPackageLogger("acs")
+	acsLogger.Info("acs")
+	recorder := performMockRequest(t, "/logs?from=acs", logger)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var lines []string
+	err := json.Unmarshal(recorder.Body.Bytes(), &lines)
+	assert.NoError(t, err)
+	assert.True(t, strings.Contains(lines[0], "acs"))
 }
 
 func taskDiffHelper(t *testing.T, expected []*apitask.Task, actual v1.TasksResponse) {
@@ -429,7 +455,7 @@ func stateSetupHelper(state dockerstate.TaskEngineState, tasks []*apitask.Task) 
 	}
 }
 
-func performMockRequest(t *testing.T, path string) *httptest.ResponseRecorder {
+func performMockRequest(t *testing.T, path string, logger *mux.Logger) *httptest.ResponseRecorder {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -438,8 +464,9 @@ func performMockRequest(t *testing.T, path string) *httptest.ResponseRecorder {
 	state := dockerstate.NewTaskEngineState()
 	stateSetupHelper(state, testTasks)
 
-	mockStateResolver.EXPECT().State().Return(state)
-	requestHandler := setupServer(utils.Strptr(testContainerInstanceArn), mockStateResolver, &config.Config{Cluster: testClusterArn})
+	mockStateResolver.EXPECT().State().Return(state).AnyTimes()
+	requestHandler := setupServer(utils.Strptr(testContainerInstanceArn),
+		mockStateResolver, &config.Config{Cluster: testClusterArn}, logger)
 
 	recorder := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", path, nil)

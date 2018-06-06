@@ -316,7 +316,6 @@ func logsRequestHandlerMaker(logger *mux.Logger) func(http.ResponseWriter, *http
 			w.Write(responseJSON)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
 		logLines, err := logger.GetLogLines(name)
 		if err != nil {
 			seelog.Warnf("Unable to get log lines for package [%s]: %v", err, name)
@@ -324,6 +323,7 @@ func logsRequestHandlerMaker(logger *mux.Logger) func(http.ResponseWriter, *http
 			w.Write(responseJSON)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(logLines)
 		w.Write(b)
 	}
