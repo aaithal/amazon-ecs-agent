@@ -40,6 +40,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/engine/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/eventhandler"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	"github.com/aws/amazon-ecs-agent/agent/utils/mocks"
@@ -132,12 +133,14 @@ const (
 	acsURL = "http://endpoint.tld"
 )
 
-var testConfig = &config.Config{
-	Cluster:            "someCluster",
-	AcceptInsecureCert: true,
-}
-
-var testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+var (
+	testConfig = &config.Config{
+		Cluster:            "someCluster",
+		AcceptInsecureCert: true,
+	}
+	testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+	logger    = mux.NewLogger(1)
+)
 
 type mockSessionResources struct {
 	client wsclient.ClientServer
@@ -239,6 +242,7 @@ func TestHandlerReconnectsOnConnectErrors(t *testing.T) {
 		resources:            &mockSessionResources{mockWsClient},
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -267,7 +271,10 @@ func TestIsInactiveInstanceErrorReturnsFalseForActiveInstance(t *testing.T) {
 // TestComputeReconnectDelayForInactiveInstance tests if the reconnect delay is computed
 // correctly for an inactive instance
 func TestComputeReconnectDelayForInactiveInstance(t *testing.T) {
-	acsSession := session{_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay}
+	acsSession := session{
+		_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay,
+		mlog: logger.GetPackageLogger("acs"),
+	}
 	assert.Equal(t, inactiveInstanceReconnectDelay, acsSession.computeReconnectDelay(true),
 		"Reconnect delay doesn't match expected value for inactive instance")
 }
@@ -281,7 +288,10 @@ func TestComputeReconnectDelayForActiveInstance(t *testing.T) {
 	mockBackoff := mock_utils.NewMockBackoff(ctrl)
 	mockBackoff.EXPECT().Duration().Return(connectionBackoffMax)
 
-	acsSession := session{backoff: mockBackoff}
+	acsSession := session{
+		backoff: mockBackoff,
+		mlog:    logger.GetPackageLogger("acs"),
+	}
 	assert.Equal(t, connectionBackoffMax, acsSession.computeReconnectDelay(false),
 		"Reconnect delay doesn't match expected value for active instance")
 }
@@ -299,6 +309,7 @@ func TestWaitForDurationReturnsTrueWhenContextNotCancelled(t *testing.T) {
 	acsSession := session{
 		ctx:    ctx,
 		cancel: cancel,
+		mlog:   logger.GetPackageLogger("acs"),
 	}
 
 	assert.True(t, acsSession.waitForDuration(time.Millisecond),
@@ -316,6 +327,7 @@ func TestWaitForDurationReturnsFalseWhenContextCancelled(t *testing.T) {
 	acsSession := session{
 		ctx:    ctx,
 		cancel: cancel,
+		mlog:   logger.GetPackageLogger("acs"),
 	}
 	cancel()
 
@@ -385,6 +397,7 @@ func TestHandlerReconnectsWithoutBackoffOnEOFError(t *testing.T) {
 		_heartbeatTimeout:               20 * time.Millisecond,
 		_heartbeatJitter:                10 * time.Millisecond,
 		_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay,
+		mlog: logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -447,6 +460,7 @@ func TestHandlerReconnectsWithBackoffOnNonEOFError(t *testing.T) {
 		resources:                     &mockSessionResources{mockWsClient},
 		_heartbeatTimeout:             20 * time.Millisecond,
 		_heartbeatJitter:              10 * time.Millisecond,
+		mlog:                          logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -507,6 +521,7 @@ func TestHandlerGeneratesDeregisteredInstanceEvent(t *testing.T) {
 		_heartbeatTimeout:               20 * time.Millisecond,
 		_heartbeatJitter:                10 * time.Millisecond,
 		_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay,
+		mlog: logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -576,6 +591,7 @@ func TestHandlerReconnectDelayForInactiveInstanceError(t *testing.T) {
 		_heartbeatTimeout:               20 * time.Millisecond,
 		_heartbeatJitter:                10 * time.Millisecond,
 		_inactiveInstanceReconnectDelay: inactiveInstanceReconnectDelay,
+		mlog: logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -632,6 +648,7 @@ func TestHandlerReconnectsOnServeErrors(t *testing.T) {
 		resources:            &mockSessionResources{mockWsClient},
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -683,6 +700,7 @@ func TestHandlerStopsWhenContextIsCancelled(t *testing.T) {
 		resources:            &mockSessionResources{mockWsClient},
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 
 	// The session error channel would have an event when the Start() method returns
@@ -737,6 +755,7 @@ func TestHandlerReconnectsOnDiscoverPollEndpointError(t *testing.T) {
 		resources:            &mockSessionResources{mockWsClient},
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		acsSession.Start()
@@ -809,6 +828,7 @@ func TestConnectionIsClosedOnIdle(t *testing.T) {
 		resources:            &mockSessionResources{},
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 	go acsSession.startACSSession(mockWsClient)
 
@@ -848,8 +868,8 @@ func TestHandlerDoesntLeakGoroutines(t *testing.T) {
 	taskEngine.EXPECT().AddTask(gomock.Any()).AnyTimes()
 
 	ended := make(chan bool, 1)
+	acsLogger := logger.GetPackageLogger("acs")
 	go func() {
-
 		acsSession := session{
 			containerInstanceARN: "myArn",
 			credentialsProvider:  testCreds,
@@ -861,8 +881,9 @@ func TestHandlerDoesntLeakGoroutines(t *testing.T) {
 			ctx:                  ctx,
 			_heartbeatTimeout:    1 * time.Second,
 			backoff:              utils.NewSimpleBackoff(connectionBackoffMin, connectionBackoffMax, connectionBackoffJitter, connectionBackoffMultiplier),
-			resources:            newSessionResources(testCreds),
+			resources:            newSessionResources(testCreds, logger.GetPackageLogger("acs")),
 			credentialsManager:   rolecredentials.NewManager(),
+			mlog:                 acsLogger,
 		}
 		acsSession.Start()
 		ended <- true
@@ -945,6 +966,7 @@ func TestStartSessionHandlesRefreshCredentialsMessages(t *testing.T) {
 			taskEngine,
 			credentialsManager,
 			taskHandler,
+			logger.GetPackageLogger("acs"),
 		)
 		acsSession.Start()
 		// StartSession should never return unless the context is canceled
@@ -1004,7 +1026,7 @@ func TestStartSessionHandlesRefreshCredentialsMessages(t *testing.T) {
 // TestACSSessionResourcesCorrectlySetsSendCredentials tests if acsSessionResources
 // struct correctly sets 'sendCredentials'
 func TestACSSessionResourcesCorrectlySetsSendCredentials(t *testing.T) {
-	acsResources := newSessionResources(nil)
+	acsResources := newSessionResources(nil, logger.GetPackageLogger("acs"))
 	// Validate that 'sendCredentials' is set to true on create
 	sendCredentials := acsResources.getSendCredentialsURLParameter()
 	if sendCredentials != "true" {
@@ -1037,7 +1059,7 @@ func TestHandlerReconnectsCorrectlySetsSendCredentialsURLParameter(t *testing.T)
 	mockWsClient.EXPECT().AddRequestHandler(gomock.Any()).AnyTimes()
 	mockWsClient.EXPECT().Close().Return(nil).AnyTimes()
 	mockWsClient.EXPECT().Serve().Return(io.EOF).AnyTimes()
-	resources := newSessionResources(testCreds)
+	resources := newSessionResources(testCreds, logger.GetPackageLogger("acs"))
 	gomock.InOrder(
 		// When the websocket client connects to ACS for the first
 		// time, 'sendCredentials' should be set to true
@@ -1064,6 +1086,7 @@ func TestHandlerReconnectsCorrectlySetsSendCredentialsURLParameter(t *testing.T)
 		backoff:              utils.NewSimpleBackoff(connectionBackoffMin, connectionBackoffMax, connectionBackoffJitter, connectionBackoffMultiplier),
 		_heartbeatTimeout:    20 * time.Millisecond,
 		_heartbeatJitter:     10 * time.Millisecond,
+		mlog:                 logger.GetPackageLogger("acs"),
 	}
 	go func() {
 		for i := 0; i < 10; i++ {

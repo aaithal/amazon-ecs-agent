@@ -14,7 +14,6 @@
 package tcshandler
 
 import (
-	"fmt"
 	"io"
 	"net/url"
 	"strings"
@@ -115,7 +114,6 @@ func startSession(url string,
 		mlog.Errorf("Error connecting to TCS: %v", err.Error())
 		return err
 	}
-	fmt.Println("TCS session logging to logger: %v", mlog)
 	mlog.Info("Connected to TCS endpoint")
 	// start a timer and listens for tcs heartbeats/acks. The timer is reset when
 	// we receive a heartbeat from the server or when a publish metrics message

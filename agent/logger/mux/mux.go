@@ -13,7 +13,7 @@ import (
 type Logger struct {
 	pkgLoggers map[string]*PackageLogger
 	lock       sync.RWMutex
-	backend    *logging.MemoryBackend
+	backend    *logging.ChannelMemoryBackend
 }
 
 // PackageLogger wraps the memory logger. It multiplexes logs to both
@@ -25,12 +25,13 @@ type PackageLogger struct {
 // NewLogger creates a new Logger object, which can be used to create
 // package level memory backed loggers
 func NewLogger(size int) *Logger {
-	backend := logging.NewMemoryBackend(size)
+	backend := logging.NewChannelMemoryBackend(size)
 	format := logging.MustStringFormatter(
 		`%{time:15:04:05.000} [%{level:.4s}]  %{message}`,
 	)
 	backendFormatter := logging.NewBackendFormatter(backend, format)
 	logging.SetBackend(backendFormatter)
+	backend.Start()
 	return &Logger{
 		pkgLoggers: make(map[string]*PackageLogger),
 		backend:    backend,

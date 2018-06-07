@@ -26,6 +26,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient/wsconn/mock"
 	"github.com/aws/aws-sdk-go/aws"
@@ -84,12 +85,15 @@ const (
 	rwTimeout       = time.Second
 )
 
-var testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+var (
+	testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
 
-var testCfg = &config.Config{
-	AcceptInsecureCert: true,
-	AWSRegion:          "us-east-1",
-}
+	testCfg = &config.Config{
+		AcceptInsecureCert: true,
+		AWSRegion:          "us-east-1",
+	}
+	logger = mux.NewLogger(1)
+)
 
 func TestMakeUnrecognizedRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -239,7 +243,7 @@ func TestConnect(t *testing.T) {
 		t.Fatal(<-serverErr)
 	}()
 
-	cs := New(server.URL, testCfg, testCreds, rwTimeout)
+	cs := New(server.URL, testCfg, testCreds, rwTimeout, logger.GetPackageLogger("acs"))
 	// Wait for up to a second for the mock server to launch
 	for i := 0; i < 100; i++ {
 		err = cs.Connect()
@@ -310,7 +314,8 @@ func TestConnectClientError(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	cs := New(testServer.URL, testCfg, testCreds, rwTimeout)
+	cs := New(testServer.URL, testCfg, testCreds,
+		rwTimeout, logger.GetPackageLogger("acs"))
 	err := cs.Connect()
 	_, ok := err.(*wsclient.WSError)
 	assert.True(t, ok)
@@ -318,7 +323,8 @@ func TestConnectClientError(t *testing.T) {
 }
 
 func testCS(conn *mock_wsconn.MockWebsocketConn) wsclient.ClientServer {
-	foo := New("localhost:443", testCfg, testCreds, rwTimeout)
+	foo := New("localhost:443", testCfg, testCreds,
+		rwTimeout, logger.GetPackageLogger("acs"))
 	cs := foo.(*clientServer)
 	cs.SetConnection(conn)
 	return cs

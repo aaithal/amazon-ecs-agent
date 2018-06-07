@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/stats"
 	"github.com/aws/amazon-ecs-agent/agent/stats/mock"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
@@ -48,7 +49,10 @@ const (
 	rwTimeout                  = time.Second
 )
 
-var testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+var (
+	testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+	logger    = mux.NewLogger(1)
+)
 
 type mockStatsEngine struct{}
 
@@ -246,7 +250,8 @@ func testCS(conn *mock_wsconn.MockWebsocketConn) wsclient.ClientServer {
 		AcceptInsecureCert: true,
 	}
 	cs := New("https://aws.amazon.com/ecs", cfg, testCreds, &mockStatsEngine{},
-		testPublishMetricsInterval, rwTimeout, false).(*clientServer)
+		testPublishMetricsInterval, rwTimeout,
+		false, logger.GetPackageLogger("tcs")).(*clientServer)
 	cs.SetConnection(conn)
 	return cs
 }
@@ -313,7 +318,8 @@ func TestMetricsDisabled(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 
-	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval, rwTimeout, true)
+	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval,
+		rwTimeout, true, logger.GetPackageLogger("tcs"))
 	cs.SetConnection(conn)
 
 	metricsPublished := make(chan struct{})
@@ -344,7 +350,8 @@ func TestCreatePublishHealthRequestsEmpty(t *testing.T) {
 	mockStatsEngine := mock_stats.NewMockEngine(ctrl)
 	cfg := config.DefaultConfig()
 
-	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval, rwTimeout, true)
+	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval,
+		rwTimeout, true, logger.GetPackageLogger("tcs"))
 	cs.SetConnection(conn)
 
 	mockStatsEngine.EXPECT().GetTaskHealthMetrics().Return(nil, nil, stats.EmptyHealthMetricsError)
@@ -364,7 +371,8 @@ func TestCreatePublishHealthRequests(t *testing.T) {
 	mockStatsEngine := mock_stats.NewMockEngine(ctrl)
 	cfg := config.DefaultConfig()
 
-	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval, rwTimeout, true)
+	cs := New("", &cfg, testCreds, mockStatsEngine, testPublishMetricsInterval,
+		rwTimeout, true, logger.GetPackageLogger("tcs"))
 	cs.SetConnection(conn)
 
 	testMetadata := &ecstcs.HealthMetadata{

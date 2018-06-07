@@ -31,6 +31,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/api/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/config"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/client"
 	"github.com/aws/amazon-ecs-agent/agent/tcs/model/ecstcs"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient"
@@ -53,12 +54,14 @@ const (
 
 type mockStatsEngine struct{}
 
-var testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
-
-var testCfg = &config.Config{
-	AcceptInsecureCert: true,
-	AWSRegion:          "us-east-1",
-}
+var (
+	testCreds = credentials.NewStaticCredentials("test-id", "test-secret", "test-token")
+	testCfg   = &config.Config{
+		AcceptInsecureCert: true,
+		AWSRegion:          "us-east-1",
+	}
+	logger = mux.NewLogger(1)
+)
 
 func (*mockStatsEngine) GetInstanceMetrics() (*ecstcs.MetricsMetadata, []*ecstcs.TaskMetric, error) {
 	req := createPublishMetricsRequest()
@@ -123,7 +126,8 @@ func TestStartSession(t *testing.T) {
 	// Start a session with the test server.
 	go startSession(server.URL, testCfg, testCreds, &mockStatsEngine{},
 		defaultHeartbeatTimeout, defaultHeartbeatJitter,
-		testPublishMetricsInterval, deregisterInstanceEventStream)
+		testPublishMetricsInterval, deregisterInstanceEventStream,
+		logger.GetPackageLogger("tcs"))
 
 	// startSession internally starts publishing metrics from the mockStatsEngine object.
 	time.Sleep(testPublishMetricsInterval)
@@ -187,8 +191,8 @@ func TestSessionConnectionClosedByRemote(t *testing.T) {
 	// Start a session with the test server.
 	err = startSession(server.URL, testCfg, testCreds, &mockStatsEngine{},
 		defaultHeartbeatTimeout, defaultHeartbeatJitter,
-		testPublishMetricsInterval, deregisterInstanceEventStream)
-
+		testPublishMetricsInterval, deregisterInstanceEventStream,
+		logger.GetPackageLogger("tcs"))
 	if err == nil {
 		t.Error("Expected io.EOF on closed connection")
 	}
@@ -224,7 +228,8 @@ func TestConnectionInactiveTimeout(t *testing.T) {
 	// Start a session with the test server.
 	err = startSession(server.URL, testCfg, testCreds, &mockStatsEngine{},
 		50*time.Millisecond, 100*time.Millisecond,
-		testPublishMetricsInterval, deregisterInstanceEventStream)
+		testPublishMetricsInterval, deregisterInstanceEventStream,
+		logger.GetPackageLogger("tcs"))
 	// if we are not blocked here, then the test pass as it will reconnect in StartSession
 	assert.Error(t, err, "Close the connection should cause the tcs client return error")
 
@@ -241,7 +246,10 @@ func TestDiscoverEndpointAndStartSession(t *testing.T) {
 	mockEcs := mock_api.NewMockECSClient(ctrl)
 	mockEcs.EXPECT().DiscoverTelemetryEndpoint(gomock.Any()).Return("", errors.New("error"))
 
-	err := startTelemetrySession(TelemetrySessionParams{ECSClient: mockEcs}, nil)
+	err := startTelemetrySession(TelemetrySessionParams{
+		ECSClient: mockEcs,
+		Logger:    logger.GetPackageLogger("tcs"),
+	}, nil)
 	if err == nil {
 		t.Error("Expected error from startTelemetrySession when DiscoverTelemetryEndpoint returns error")
 	}

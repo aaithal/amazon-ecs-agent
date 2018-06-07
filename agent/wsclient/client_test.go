@@ -27,6 +27,7 @@ import (
 
 	"github.com/aws/amazon-ecs-agent/agent/acs/model/ecsacs"
 	"github.com/aws/amazon-ecs-agent/agent/config"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient/mock/utils"
 	"github.com/aws/amazon-ecs-agent/agent/wsclient/wsconn/mock"
 	"github.com/golang/mock/gomock"
@@ -41,6 +42,10 @@ import (
 )
 
 const dockerEndpoint = "/var/run/docker.sock"
+
+var (
+	logger = mux.NewLogger(1)
+)
 
 // Close closes the underlying connection. Implement Close() in this file
 // as ClientServerImpl doesn't implement it. This is needed by the
@@ -103,6 +108,7 @@ func getClientServer(url string) *ClientServerImpl {
 		CredentialProvider: testCreds,
 		TypeDecoder:        BuildTypeDecoder(types),
 		RWTimeout:          time.Second,
+		Logger:             logger.GetPackageLogger("wsclient"),
 	}
 }
 
@@ -246,7 +252,10 @@ func TestSetReadDeadlineClosedConnection(t *testing.T) {
 	defer ctrl.Finish()
 
 	conn := mock_wsconn.NewMockWebsocketConn(ctrl)
-	cs := &ClientServerImpl{conn: conn}
+	cs := &ClientServerImpl{
+		conn:   conn,
+		Logger: logger.GetPackageLogger("wsclient"),
+	}
 
 	opErr := &net.OpError{Err: errors.New(errClosed)}
 	conn.EXPECT().SetReadDeadline(gomock.Any()).Return(opErr)
@@ -258,7 +267,10 @@ func TestSetReadDeadlineError(t *testing.T) {
 	defer ctrl.Finish()
 
 	conn := mock_wsconn.NewMockWebsocketConn(ctrl)
-	cs := &ClientServerImpl{conn: conn}
+	cs := &ClientServerImpl{
+		conn:   conn,
+		Logger: logger.GetPackageLogger("wsclient"),
+	}
 
 	gomock.InOrder(
 		conn.EXPECT().SetReadDeadline(gomock.Any()).Return(errors.New("error")),

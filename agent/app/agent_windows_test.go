@@ -25,6 +25,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/ec2"
 	"github.com/aws/amazon-ecs-agent/agent/engine/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	statemanager_mocks "github.com/aws/amazon-ecs-agent/agent/statemanager/mocks"
@@ -289,6 +290,7 @@ func TestDoStartTaskLimitsFail(t *testing.T) {
 		stateManagerFactory:   stateManagerFactory,
 		saveableOptionFactory: saveableOptionFactory,
 		ec2MetadataClient:     ec2.NewBlackholeEC2MetadataClient(),
+		logger:                mux.NewLogger(logLinesInMem),
 	}
 
 	exitCode := agent.doStart(eventstream.NewEventStream("events", ctx),

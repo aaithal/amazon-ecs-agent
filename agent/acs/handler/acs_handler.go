@@ -16,7 +16,6 @@
 package handler
 
 import (
-	"fmt"
 	"io"
 	"net/url"
 	"strconv"
@@ -314,7 +313,6 @@ func (acsSession *session) startACSSession(client wsclient.ClientServer) error {
 		acsSession.mlog.Errorf("Error connecting to ACS: %v", err)
 		return err
 	}
-	fmt.Println("ACS session logging to logger: %v", acsSession.mlog)
 	acsSession.mlog.Info("Connected to ACS endpoint")
 	// Start inactivity timer for closing the connection
 	timer := newDisconnectionTimer(client, acsSession.heartbeatTimeout(),

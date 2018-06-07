@@ -39,6 +39,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/eni/pause"
 	"github.com/aws/amazon-ecs-agent/agent/eni/pause/mocks"
 	"github.com/aws/amazon-ecs-agent/agent/eventstream"
+	"github.com/aws/amazon-ecs-agent/agent/logger/mux"
 	"github.com/aws/amazon-ecs-agent/agent/sighandlers/exitcodes"
 	"github.com/aws/amazon-ecs-agent/agent/statemanager"
 	"github.com/aws/amazon-ecs-agent/agent/taskresource"
@@ -110,6 +111,7 @@ func TestDoStartHappyPath(t *testing.T) {
 		dockerClient:       dockerClient,
 		terminationHandler: func(saver statemanager.Saver, taskEngine engine.TaskEngine) {},
 		mobyPlugins:        mockMobyPlugins,
+		logger:             mux.NewLogger(logLinesInMem),
 	}
 
 	go agent.doStart(eventstream.NewEventStream("events", ctx),
@@ -213,6 +215,7 @@ func TestDoStartTaskENIHappyPath(t *testing.T) {
 		ec2MetadataClient:  mockMetadata,
 		terminationHandler: func(saver statemanager.Saver, taskEngine engine.TaskEngine) {},
 		mobyPlugins:        mockMobyPlugins,
+		logger:             mux.NewLogger(logLinesInMem),
 	}
 
 	go agent.doStart(eventstream.NewEventStream("events", ctx),
@@ -450,6 +453,7 @@ func TestInitializeTaskENIDependenciesPauseLoaderError(t *testing.T) {
 				cniClient:         cniClient,
 				pauseLoader:       mockPauseLoader,
 				cfg:               &cfg,
+				logger:            mux.NewLogger(logLinesInMem),
 			}
 			err, ok := agent.initializeTaskENIDependencies(state, taskEngine)
 			assert.Error(t, err)
@@ -519,6 +523,7 @@ func TestDoStartCgroupInitHappyPath(t *testing.T) {
 		resourceFields: &taskresource.ResourceFields{
 			Control: mockControl,
 		},
+		logger: mux.NewLogger(logLinesInMem),
 	}
 
 	go agent.doStart(eventstream.NewEventStream("events", ctx),
@@ -562,6 +567,7 @@ func TestDoStartCgroupInitErrorPath(t *testing.T) {
 		resourceFields: &taskresource.ResourceFields{
 			Control: mockControl,
 		},
+		logger: mux.NewLogger(logLinesInMem),
 	}
 
 	status := agent.doStart(eventstream.NewEventStream("events", ctx),
